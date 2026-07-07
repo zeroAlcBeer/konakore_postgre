@@ -22,7 +22,7 @@ export const getTags = async (page = 1, limit = 100, liked = null) => {
     params.append('liked', liked.toString());
   }
   const response = await apiClient.get(`/v1/tags?${params}`);
-  return response.data;
+  return response.data.tags;
 };
 
 export const searchTags = async (query, page = 1, pageSize = 100, liked = null) => {
