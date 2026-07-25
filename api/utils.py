@@ -51,6 +51,21 @@ def _get_pool():
                     raise
 
 
+def _borrow_conn(timeout=5.0):
+    """getconn() raises PoolError immediately when the pool is empty, which
+    would turn request bursts wider than the pool into 500s. Wait for a
+    connection instead, up to `timeout` seconds."""
+    pool = _get_pool()
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return pool.getconn()
+        except pg_pool.PoolError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
+
+
 @contextlib.contextmanager
 def get_db_connection():
     """Borrow a pooled connection for one request.
@@ -60,7 +75,7 @@ def get_db_connection():
     connection context manager), but the connection now returns to the pool
     instead of lingering until garbage collection.
     """
-    conn = _get_pool().getconn()
+    conn = _borrow_conn()
     try:
         with conn:
             yield conn
