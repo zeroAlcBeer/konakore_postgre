@@ -8,6 +8,9 @@
 # Your private registry URL. Can be overridden e.g., `make push REGISTRY_URL=my.registry.com`
 REGISTRY_URL ?= 192.168.0.110:5000
 
+# Compose command (v2 plugin syntax; docker-compose v1 is not installed on the pi)
+COMPOSE ?= docker compose
+
 # Service names used in docker-compose
 API_SERVICE_NAME := api
 WORKER_SERVICE_NAME := worker
@@ -41,12 +44,12 @@ uv-lock:
 # Build the custom docker images for api, worker, and frontend
 build:
 	@echo "--> Building local Docker images..."
-	docker-compose build
+	$(COMPOSE) build
 
 # Build only the frontend image
 build-frontend:
 	@echo "--> Building frontend Docker image..."
-	docker-compose build frontend
+	$(COMPOSE) build frontend
 
 # Start frontend locally against the remote API on pi.
 # Uses frontend/.env (VITE_API_TARGET); copies from .env.example if missing.
@@ -62,12 +65,12 @@ local:
 # Start all services in detached mode
 up:
 	@echo "--> Starting all services..."
-	docker-compose up -d
+	$(COMPOSE) up -d
 
 # Stop and remove all services
 down:
 	@echo "--> Stopping all services..."
-	docker-compose down
+	$(COMPOSE) down
 
 # Restart all services
 restart: down up
@@ -75,22 +78,22 @@ restart: down up
 # Tail logs from all services
 logs:
 	@echo "--> Tailing logs for all services..."
-	docker-compose logs -f
+	$(COMPOSE) logs -f
 
 # Tail logs for the api service
 logs-api:
 	@echo "--> Tailing logs for the api service..."
-	docker-compose logs -f api
+	$(COMPOSE) logs -f api
 
 # Tail logs for the worker service
 logs-worker:
 	@echo "--> Tailing logs for the worker service..."
-	docker-compose logs -f worker
+	$(COMPOSE) logs -f worker
 
 # Tail logs for the frontend service
 logs-frontend:
 	@echo "--> Tailing logs for the frontend service..."
-	docker-compose logs -f frontend
+	$(COMPOSE) logs -f frontend
 
 # Run react-doctor to check React codebase health (100/100 target)
 doctor:
@@ -117,7 +120,7 @@ release-component:
 		frontend) LOCAL="$(LOCAL_FRONTEND_IMAGE)"; REMOTE="$(FRONTEND_IMAGE_NAME)" ;; \
 		*) echo "Error: unsupported COMPONENT=$(COMPONENT)"; exit 1 ;; \
 	esac; \
-	docker-compose build $(COMPONENT); \
+	$(COMPOSE) build $(COMPONENT); \
 	echo "--> Publishing $$REMOTE @ $(GIT_SHA)"; \
 	docker tag  "$$LOCAL:latest" "$(REGISTRY_URL)/$$REMOTE:latest"; \
 	docker tag  "$$LOCAL:latest" "$(REGISTRY_URL)/$$REMOTE:$(GIT_SHA)"; \

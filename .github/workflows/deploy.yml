@@ -13,8 +13,15 @@ on:
       - "api/**"
       - "worker/**"
       - "frontend/**"
+      - "Makefile"
       - "docker-compose.deployment.yaml"
       - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      components:
+        description: "Comma-separated components to force-release (api,worker,frontend)"
+        required: false
+        default: ""
 
 concurrency:
   group: deploy
@@ -24,13 +31,14 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      api: ${{ steps.filter.outputs.api }}
-      worker: ${{ steps.filter.outputs.worker }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      api: ${{ steps.filter.outputs.api == 'true' || contains(github.event.inputs.components, 'api') }}
+      worker: ${{ steps.filter.outputs.worker == 'true' || contains(github.event.inputs.components, 'worker') }}
+      frontend: ${{ steps.filter.outputs.frontend == 'true' || contains(github.event.inputs.components, 'frontend') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name == 'push'
         with:
           filters: |
             api:
