@@ -3,7 +3,10 @@ Shared utility functions for the API.
 """
 import os
 import time
+import threading
+import contextlib
 import psycopg2
+from psycopg2 import pool as pg_pool
 import requests
 import logging
 from dotenv import load_dotenv
@@ -12,28 +15,58 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+_pool = None
+_pool_lock = threading.Lock()
 
+
+def _get_pool():
+    """Lazily create the shared connection pool, retrying while postgres
+    is still starting up."""
+    global _pool
+    if _pool is not None:
+        return _pool
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
+        retries = 5
+        delay = 5  # seconds
+        for i in range(retries):
+            try:
+                _pool = pg_pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=int(os.getenv("DB_POOL_MAX", "10")),
+                    host="postgres",
+                    dbname=os.getenv("POSTGRES_DB"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD")
+                )
+                return _pool
+            except psycopg2.OperationalError as e:
+                logger.warning(f"Database connection failed: {e}")
+                if i < retries - 1:
+                    logger.warning(f"Retrying in {delay} seconds... ({i+1}/{retries})")
+                    time.sleep(delay)
+                else:
+                    logger.error("Could not connect to the database after several retries.")
+                    raise
+
+
+@contextlib.contextmanager
 def get_db_connection():
-    """Establishes a database connection with retry logic."""
-    retries = 5
-    delay = 5  # seconds
-    for i in range(retries):
-        try:
-            conn = psycopg2.connect(
-                host="postgres",
-                dbname=os.getenv("POSTGRES_DB"),
-                user=os.getenv("POSTGRES_USER"),
-                password=os.getenv("POSTGRES_PASSWORD")
-            )
-            return conn
-        except psycopg2.OperationalError as e:
-            print(f"Database connection failed: {e}")
-            if i < retries - 1:
-                print(f"Retrying in {delay} seconds... ({i+1}/{retries})")
-                time.sleep(delay)
-            else:
-                print("Could not connect to the database after several retries.")
-                raise
+    """Borrow a pooled connection for one request.
+
+    Keeps the semantics call sites already rely on: `with get_db_connection()
+    as conn` commits on success and rolls back on exception (psycopg2
+    connection context manager), but the connection now returns to the pool
+    instead of lingering until garbage collection.
+    """
+    conn = _get_pool().getconn()
+    try:
+        with conn:
+            yield conn
+    finally:
+        # Discard broken connections instead of recycling them.
+        _get_pool().putconn(conn, close=conn.closed)
 
 
 def trigger_file_sync(action="start"):
