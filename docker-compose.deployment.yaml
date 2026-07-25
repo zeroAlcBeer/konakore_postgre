@@ -65,6 +65,8 @@ services:
         condition: service_healthy
     ports:
       - '5173:5173'
+    volumes:
+      - nginx_cache:/var/cache/nginx
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173/"]
       interval: 30s
@@ -76,3 +78,4 @@ volumes:
   postgres_data:
     external: true
     name: konakore-postgres_postgres_data
+  nginx_cache:
