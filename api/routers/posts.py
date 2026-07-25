@@ -134,9 +134,19 @@ def list_posts(
                 """, (limit, offset))
 
             else:
-                # No filter - return all posts
-                cur.execute("SELECT COUNT(*) FROM posts")
-                total_count = cur.fetchone()['count']
+                # No filter - return all posts.
+                # Use the planner's row estimate instead of an exact COUNT(*),
+                # which would scan the whole ~333k-row table on every page
+                # view just to render pagination totals.
+                cur.execute(
+                    "SELECT reltuples::bigint AS estimate FROM pg_class WHERE relname = 'posts'"
+                )
+                row = cur.fetchone()
+                total_count = row['estimate'] if row else None
+                if total_count is None or total_count < 0:
+                    # Estimate unavailable (table never analyzed) - fall back.
+                    cur.execute("SELECT COUNT(*) FROM posts")
+                    total_count = cur.fetchone()['count']
 
                 cur.execute("""
                     SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at,
