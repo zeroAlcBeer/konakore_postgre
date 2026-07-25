@@ -1,1 +1,36 @@
 # konakore_postgre
+
+Self-hosted konachan.net browser: syncs post/tag metadata into Postgres,
+downloads liked images via aria2, and serves a React gallery with
+tag-embedding-based similarity scoring (pgvector).
+
+## Architecture
+
+| Service    | Stack                        | Role                                                                 |
+|------------|------------------------------|----------------------------------------------------------------------|
+| `postgres` | pgvector/pgvector:pg14       | Single source of truth: posts, tags, task state, sparse tag embeddings |
+| `api`      | Python / FastAPI             | REST API (`/v1/*`, Google AIP style) consumed by the frontend         |
+| `worker`   | Go                           | Scheduled konachan sync, aria2 file downloads, embedding + user-profile vectors; HTTP control plane on `:8090` |
+| `frontend` | React + Vite, served by nginx | Gallery UI; nginx also proxies `/api/` → api and `/konachan-proxy/` → konachan.net |
+
+The api triggers the worker over HTTP (fire-and-forget); everything else
+communicates through Postgres. The Python `scheduler/` and `file_sync/`
+services that predated the Go worker were removed in 2026-07 — see git
+history if you need them.
+
+## Development
+
+```
+make up      # local stack via docker-compose.yaml
+make local   # frontend dev server against the remote API (frontend/.env)
+make help    # everything else
+```
+
+## Deployment
+
+Production runs as a Dockge stack on a Raspberry Pi, deployed by GitHub
+Actions (`.github/workflows/deploy.yml`): pushes to master build changed
+components natively on a self-hosted runner, publish immutable git-SHA
+image tags to a private Zot registry, pin them in the stack's `.env`
+(see `.env.example`), and roll `docker-compose.deployment.yaml`.
+Manual releases: `make release-{api,worker,frontend}`.
