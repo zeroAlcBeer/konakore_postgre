@@ -47,39 +47,10 @@ func NewTaskStore(db *sql.DB, logger *slog.Logger) *TaskStore {
 }
 
 func (s *TaskStore) EnsureSchema(ctx context.Context) error {
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS schedule_state (
-			job_name TEXT PRIMARY KEY,
-			state JSONB NOT NULL,
-			last_run_at TIMESTAMPTZ
-		)`,
-		`CREATE TABLE IF NOT EXISTS task_state (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			type TEXT NOT NULL,
-			category TEXT NOT NULL DEFAULT '',
-			status TEXT NOT NULL DEFAULT 'stopped',
-			desired_status TEXT NOT NULL DEFAULT 'stopped',
-			progress_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
-			current_value BIGINT,
-			total_value BIGINT,
-			unit TEXT,
-			state JSONB NOT NULL DEFAULT '{}'::jsonb,
-			config JSONB NOT NULL DEFAULT '{}'::jsonb,
-			error_message TEXT,
-			started_at TIMESTAMPTZ,
-			completed_at TIMESTAMPTZ,
-			last_run_at TIMESTAMPTZ,
-			next_run_at TIMESTAMPTZ,
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_task_state_status ON task_state(status)`,
-		`CREATE INDEX IF NOT EXISTS idx_task_state_updated_at ON task_state(updated_at)`,
-	}
-	for _, stmt := range statements {
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			return err
-		}
+	// Schema DDL lives in embedded migrations (see migrations.go); this
+	// method only guarantees they ran and re-seeds idempotent defaults.
+	if err := applyMigrations(ctx, s.db, s.log); err != nil {
+		return err
 	}
 
 	defaultStates := map[string]map[string]any{

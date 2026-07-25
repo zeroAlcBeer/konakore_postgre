@@ -10,8 +10,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret}
       - POSTGRES_DB=${POSTGRES_DB:-konakore}
     volumes:
+      # Schema is managed by the worker's embedded migration runner
+      # (worker/migrations.go), not by initdb scripts.
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
     ports:
       - '5432:5432'
     healthcheck:
