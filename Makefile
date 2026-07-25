@@ -18,8 +18,8 @@ API_IMAGE_NAME := my-konakore-api
 WORKER_IMAGE_NAME := my-konakore-worker
 FRONTEND_IMAGE_NAME := my-konakore-frontend
 
-# Image version/tag
-TAG ?= latest
+# Immutable tag derived from git HEAD.
+GIT_SHA := $(shell git rev-parse --short=12 HEAD 2>/dev/null)
 
 # Project name derived from the current directory, used by docker-compose
 PROJECT_NAME := $(shell basename $(CURDIR))
@@ -99,40 +99,44 @@ doctor:
 
 
 # --- Deployment ---
-.PHONY: tag push release
+.PHONY: release-component release-api release-worker release-frontend release-all
 
-# Tag the freshly built images for the private registry
-tag: build
-	@echo "--> Tagging images for registry at $(REGISTRY_URL)..."
-	docker tag $(LOCAL_API_IMAGE) $(REGISTRY_URL)/$(API_IMAGE_NAME):$(TAG)
-	docker tag $(LOCAL_WORKER_IMAGE) $(REGISTRY_URL)/$(WORKER_IMAGE_NAME):$(TAG)
-	docker tag $(LOCAL_FRONTEND_IMAGE) $(REGISTRY_URL)/$(FRONTEND_IMAGE_NAME):$(TAG)
+# Build and publish one independently deployable component, tagged both
+# :latest and :$(GIT_SHA). Prefer the release-{api,worker,frontend} aliases
+# instead of calling this target directly.
+release-component:
+	@if [ -z "$(GIT_SHA)" ]; then echo "Error: not in a git repo"; exit 1; fi
+	@if [ -z "$(COMPONENT)" ]; then echo "Error: COMPONENT is required"; exit 1; fi
+	@if ! git diff-index --quiet HEAD --; then \
+		echo "Warning: working tree dirty — :$(GIT_SHA) will NOT represent committed state"; \
+	fi
+	@set -eu; \
+	case "$(COMPONENT)" in \
+		api)      LOCAL="$(LOCAL_API_IMAGE)";      REMOTE="$(API_IMAGE_NAME)" ;; \
+		worker)   LOCAL="$(LOCAL_WORKER_IMAGE)";   REMOTE="$(WORKER_IMAGE_NAME)" ;; \
+		frontend) LOCAL="$(LOCAL_FRONTEND_IMAGE)"; REMOTE="$(FRONTEND_IMAGE_NAME)" ;; \
+		*) echo "Error: unsupported COMPONENT=$(COMPONENT)"; exit 1 ;; \
+	esac; \
+	docker-compose build $(COMPONENT); \
+	echo "--> Publishing $$REMOTE @ $(GIT_SHA)"; \
+	docker tag  "$$LOCAL:latest" "$(REGISTRY_URL)/$$REMOTE:latest"; \
+	docker tag  "$$LOCAL:latest" "$(REGISTRY_URL)/$$REMOTE:$(GIT_SHA)"; \
+	docker push "$(REGISTRY_URL)/$$REMOTE:latest"; \
+	docker push "$(REGISTRY_URL)/$$REMOTE:$(GIT_SHA)"; \
+	TAG_VAR="$$(echo "$(COMPONENT)" | tr '[:lower:]' '[:upper:]')_TAG"; \
+	echo "--> Next on pi: set $$TAG_VAR=$(GIT_SHA) in /opt/stacks/konakore_postgre/.env, then compose pull/up"
 
-# Push the tagged images to the private registry
-push:
-	@echo "--> Pushing images to registry at $(REGISTRY_URL)..."
-	docker push $(REGISTRY_URL)/$(API_IMAGE_NAME):$(TAG)
-	docker push $(REGISTRY_URL)/$(WORKER_IMAGE_NAME):$(TAG)
-	docker push $(REGISTRY_URL)/$(FRONTEND_IMAGE_NAME):$(TAG)
+release-api:
+	@$(MAKE) release-component COMPONENT=api --no-print-directory
 
-# Perform the full release cycle for all images
-release: tag push
-	@echo "--> Release for api, worker, and frontend images is complete."
+release-worker:
+	@$(MAKE) release-component COMPONENT=worker --no-print-directory
 
+release-frontend:
+	@$(MAKE) release-component COMPONENT=frontend --no-print-directory
 
-# --- SHA-tagged Frontend Release ---
-.PHONY: release-sha
-
-# Build, tag, and push ONLY the frontend image, tagged with the current git short SHA.
-# The resulting image is: $(REGISTRY_URL)/$(FRONTEND_IMAGE_NAME):<git-sha>
-release-sha:
-	@echo "--> Building frontend image tagged with git SHA..."
-	@SHA=$$(git rev-parse --short HEAD); \
-	echo "    git SHA: $$SHA"; \
-	docker-compose build frontend; \
-	docker tag $(LOCAL_FRONTEND_IMAGE) $(REGISTRY_URL)/$(FRONTEND_IMAGE_NAME):$$SHA; \
-	docker push $(REGISTRY_URL)/$(FRONTEND_IMAGE_NAME):$$SHA; \
-	echo "--> Frontend image released: $(REGISTRY_URL)/$(FRONTEND_IMAGE_NAME):$$SHA"
+# Release every component at the current git SHA
+release-all: release-api release-worker release-frontend
 
 
 # --- Help ---
@@ -157,11 +161,10 @@ help:
 	@echo "  doctor         Run react-doctor to check React codebase health"
 	@echo ""
 	@echo "Deployment:"
-	@echo "  tag            Tag the api, worker, and frontend images for the registry"
-	@echo "  push           Push the tagged images to the registry"
-	@echo "  release        Build, tag, and push all custom images"
-	@echo "  release-sha    Build, tag, and push ONLY frontend, tagged with git short SHA"
+	@echo "  release-api      Build + push the api image (:latest and :git-sha)"
+	@echo "  release-worker   Build + push the worker image (:latest and :git-sha)"
+	@echo "  release-frontend Build + push the frontend image (:latest and :git-sha)"
+	@echo "  release-all      Release every component at the current git SHA"
 	@echo ""
 	@echo "Environment Variables:"
 	@echo "  REGISTRY_URL   Private registry URL (default: 192.168.0.110:5000)"
-	@echo "  TAG            Image tag (default: latest)"

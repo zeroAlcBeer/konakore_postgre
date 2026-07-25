@@ -8,6 +8,7 @@ This API follows Google AIP (API Improvement Proposals) standards for:
 - Error handling (AIP-193)
 """
 import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -43,11 +44,17 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS middleware setup
+# CORS middleware setup.
+# Production traffic is same-origin through the nginx proxy, so these origins
+# only matter for non-proxied dev access. Override with a comma-separated
+# CORS_ORIGINS env var; an empty value falls back to the defaults.
 origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://192.168.0.110:5173",
+    o.strip()
+    for o in (
+        os.getenv("CORS_ORIGINS")
+        or "http://localhost:5173,http://127.0.0.1:5173,http://192.168.0.110:5173"
+    ).split(",")
+    if o.strip()
 ]
 
 # Add GZip middleware for response compression
