@@ -40,3 +40,7 @@ Makefile.local
 
 # Node
 node_modules/
+
+# Python
+__pycache__/
+*.pyc
