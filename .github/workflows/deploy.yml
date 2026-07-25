@@ -96,11 +96,14 @@ jobs:
             api=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001/ || true)
             fe=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5173/ || true)
             wk=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/health || true)
-            if [ "$api" = "200" ] && [ "$fe" = "200" ] && [ "$wk" = "200" ]; then
+            # The full nginx→api proxy chain, not just the static page: a
+            # stale upstream DNS entry once served 502s while / stayed 200.
+            chain=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:5173/api/v1/posts?limit=1" || true)
+            if [ "$api" = "200" ] && [ "$fe" = "200" ] && [ "$wk" = "200" ] && [ "$chain" = "200" ]; then
               echo "healthy after $((i*5))s"
               exit 0
             fi
             sleep 5
           done
-          echo "stack never became healthy (api=$api frontend=$fe worker=$wk)"
+          echo "stack never became healthy (api=$api frontend=$fe worker=$wk chain=$chain)"
           exit 1
