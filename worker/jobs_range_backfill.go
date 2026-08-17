@@ -210,8 +210,19 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 		w.markTaskError(ctx, def, "running", runID, "fetch_window", err)
 		return
 	}
-	if len(posts) > 0 {
-		if err := w.upsertPosts(ctx, posts); err != nil {
+	// An id-range query returns deleted posts too (unlike page-based browsing,
+	// which hides them). Skip deleted / image-less posts so they don't clutter
+	// the feed with the upstream "deleted" placeholder.
+	active := make([]map[string]any, 0, len(posts))
+	for _, p := range posts {
+		if asString(p["status"]) == "deleted" || asString(p["file_url"]) == "" {
+			continue
+		}
+		active = append(active, p)
+	}
+	skipped := len(posts) - len(active)
+	if len(active) > 0 {
+		if err := w.upsertPosts(ctx, active); err != nil {
 			w.markTaskError(ctx, def, "running", runID, "upsert_window", err)
 			return
 		}
@@ -220,7 +231,8 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 	state["current_id"] = float64(nextLow)
 	state["last_low"] = float64(low)
 	state["last_high"] = float64(high)
-	state["last_count"] = float64(len(posts))
+	state["last_count"] = float64(len(active))
+	state["last_skipped_deleted"] = float64(skipped)
 	state["ceiling"] = float64(ceiling)
 	state["caught_up"] = caughtUp
 	_ = w.store.UpdateScheduleState(ctx, rangeBackfillTaskID, state)
@@ -232,10 +244,12 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 		CurrentValue: int64Ptr(high), TotalValue: int64Ptr(ceiling), Unit: "ids",
 		State: map[string]any{
 			"run_id": runID, "current_id": nextLow, "window_low": low, "window_high": high,
-			"last_count": len(posts), "ceiling": ceiling, "caught_up": caughtUp, "current_step": "completed",
+			"last_count": len(active), "last_skipped_deleted": skipped, "ceiling": ceiling,
+			"caught_up": caughtUp, "current_step": "completed",
 		},
 		Config: def.Config, StartedAt: &startedAt, CompletedAt: &completedAt, LastRunAt: &completedAt,
 	})
 	log.Info("range backfill window synced", "event", "batch_complete",
-		"low", low, "high", high, "count", len(posts), "caught_up", caughtUp, "ceiling", ceiling)
+		"low", low, "high", high, "count", len(active), "skipped_deleted", skipped,
+		"caught_up", caughtUp, "ceiling", ceiling)
 }
