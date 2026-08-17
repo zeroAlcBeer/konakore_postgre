@@ -1,0 +1,241 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const rangeBackfillTaskID = "range-backfill"
+
+// konachanComConfigured reports whether all credentials required to fetch the
+// Cloudflare-protected konachan.com explicit source are present.
+func (w *Worker) konachanComConfigured() bool {
+	return w.cfg.KonachanLogin != "" &&
+		w.cfg.KonachanPasswordHash != "" &&
+		w.cfg.KonachanCFClearance != "" &&
+		w.cfg.KonachanUserAgent != ""
+}
+
+// newKonachanComRequest builds an authenticated konachan.com post.json request
+// that replays a browser cf_clearance cookie so Cloudflare lets it through.
+func (w *Worker) newKonachanComRequest(ctx context.Context, tags string, limit int64) (*http.Request, error) {
+	q := url.Values{}
+	q.Set("limit", strconv.FormatInt(limit, 10))
+	if tags != "" {
+		q.Set("tags", tags)
+	}
+	if w.cfg.KonachanLogin != "" {
+		q.Set("login", w.cfg.KonachanLogin)
+	}
+	if w.cfg.KonachanPasswordHash != "" {
+		q.Set("password_hash", w.cfg.KonachanPasswordHash)
+	}
+	endpoint := strings.TrimRight(w.cfg.KonachanComBase, "/") + "/post.json?" + q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", w.cfg.KonachanUserAgent)
+	req.Header.Set("Cookie", "cf_clearance="+w.cfg.KonachanCFClearance)
+	req.Header.Set("Accept", "application/json")
+	return req, nil
+}
+
+// fetchKonachanCom performs an authenticated GET and decodes the JSON post
+// array. A non-200 status or an HTML body (Cloudflare challenge / expired
+// clearance) is surfaced as an error so the caller can retry later.
+func (w *Worker) fetchKonachanCom(ctx context.Context, tags string, limit int64) ([]map[string]any, error) {
+	req, err := w.newKonachanComRequest(ctx, tags, limit)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := w.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("konachan.com status %d (cf_clearance may be expired): %.120s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" || trimmed[0] != '[' {
+		return nil, fmt.Errorf("konachan.com returned non-JSON (cf_clearance may be expired): %.120s", trimmed)
+	}
+	decoder := json.NewDecoder(strings.NewReader(trimmed))
+	decoder.UseNumber()
+	var posts []map[string]any
+	if err := decoder.Decode(&posts); err != nil {
+		return nil, err
+	}
+	return posts, nil
+}
+
+// konachanComMaxID returns the id of the newest post on konachan.com.
+func (w *Worker) konachanComMaxID(ctx context.Context) (int64, error) {
+	posts, err := w.fetchKonachanCom(ctx, "order:id_desc", 1)
+	if err != nil {
+		return 0, err
+	}
+	if len(posts) == 0 {
+		return 0, fmt.Errorf("konachan.com returned no posts for max-id probe")
+	}
+	return asInt64(posts[0]["id"]), nil
+}
+
+// runRangeBackfillScheduler walks id windows on konachan.com to recover the
+// explicit/questionable posts that konachan.net no longer serves, then tails
+// the newest window so freshly uploaded q/e posts keep flowing in.
+func (w *Worker) runRangeBackfillScheduler(ctx context.Context) {
+	def := taskDef(rangeBackfillTaskID)
+
+	if !w.konachanComConfigured() {
+		now := time.Now().UTC()
+		_ = w.store.UpdateTask(ctx, TaskSnapshot{
+			ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
+			Status: "stopped", DesiredStatus: "stopped", ProgressPct: 0, Unit: "ids",
+			State:  map[string]any{"current_step": "disabled", "reason": "missing_konachan_com_config"},
+			Config: def.Config, CompletedAt: &now, LastRunAt: &now,
+		})
+		w.log.Warn("range backfill disabled: konachan.com credentials not configured",
+			"event", "task_skip", "task", rangeBackfillTaskID, "reason", "missing_konachan_com_config")
+		return
+	}
+
+	interval := w.cfg.RangeBackfillInterval
+	if interval <= 0 {
+		interval = 2 * time.Minute
+	}
+	next := time.Now().UTC().Add(interval)
+	_ = w.store.UpdateTask(ctx, TaskSnapshot{
+		ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
+		Status: "scheduled", DesiredStatus: "running", ProgressPct: 0, Unit: "ids",
+		State:  map[string]any{"current_step": "waiting_for_next_run"},
+		Config: def.Config, NextRunAt: &next,
+	})
+	w.log.Info("range backfill scheduler started", "event", "task_start",
+		"interval", interval.String(), "start_id", w.cfg.RangeBackfillStartID, "window", w.cfg.RangeBackfillWindow)
+
+	for {
+		if !sleepContext(ctx, time.Until(next)) {
+			w.markTaskStopped(context.Background(), def, "running", "", "context_cancelled")
+			return
+		}
+		w.runRangeBackfillOnce(ctx)
+		next = time.Now().UTC().Add(interval)
+		_ = w.store.UpdateTask(ctx, TaskSnapshot{
+			ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
+			Status: "scheduled", DesiredStatus: "running", ProgressPct: 100, Unit: "ids",
+			State:  map[string]any{"current_step": "waiting_for_next_run"},
+			Config: def.Config, NextRunAt: &next,
+		})
+	}
+}
+
+func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
+	def := taskDef(rangeBackfillTaskID)
+	runID := runID()
+	log := w.log.With("task", rangeBackfillTaskID, "run_id", runID)
+	startedAt := time.Now().UTC()
+
+	state, err := w.store.GetScheduleState(ctx, rangeBackfillTaskID)
+	if err != nil {
+		w.markTaskError(ctx, def, "running", runID, "load_schedule_state", err)
+		return
+	}
+
+	startID := w.cfg.RangeBackfillStartID
+	window := w.cfg.RangeBackfillWindow
+	if window <= 0 {
+		window = 100
+	}
+	low := asInt64(state["current_id"])
+	if low < startID {
+		low = startID
+	}
+
+	ceiling, err := w.konachanComMaxID(ctx)
+	if err != nil {
+		w.markTaskError(ctx, def, "running", runID, "fetch_max_id", err)
+		return
+	}
+
+	high := low + window - 1
+	caughtUp := false
+	var nextLow int64
+	if high >= ceiling {
+		high = ceiling
+		caughtUp = true
+		// Tail mode: keep rescanning the newest window so new q/e uploads are
+		// picked up every tick (upsert is idempotent).
+		nextLow = ceiling - window + 1
+		if nextLow < startID {
+			nextLow = startID
+		}
+	} else {
+		nextLow = high + 1
+	}
+
+	progress := 0.0
+	if ceiling > startID {
+		progress = float64(low-startID) * 100 / float64(ceiling-startID)
+		if progress > 100 {
+			progress = 100
+		}
+	}
+	_ = w.store.UpdateTask(ctx, TaskSnapshot{
+		ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
+		Status: "running", DesiredStatus: "running", ProgressPct: progress,
+		CurrentValue: int64Ptr(low), TotalValue: int64Ptr(ceiling), Unit: "ids",
+		State: map[string]any{
+			"run_id": runID, "current_id": low, "window_low": low, "window_high": high,
+			"ceiling": ceiling, "caught_up": caughtUp, "current_step": "fetching konachan.com window",
+		},
+		Config: def.Config, StartedAt: &startedAt, LastRunAt: &startedAt,
+	})
+
+	tags := fmt.Sprintf("id:%d..%d order:id_desc", low, high)
+	posts, err := w.fetchKonachanCom(ctx, tags, window)
+	if err != nil {
+		w.markTaskError(ctx, def, "running", runID, "fetch_window", err)
+		return
+	}
+	if len(posts) > 0 {
+		if err := w.upsertPosts(ctx, posts); err != nil {
+			w.markTaskError(ctx, def, "running", runID, "upsert_window", err)
+			return
+		}
+	}
+
+	state["current_id"] = float64(nextLow)
+	state["last_low"] = float64(low)
+	state["last_high"] = float64(high)
+	state["last_count"] = float64(len(posts))
+	state["ceiling"] = float64(ceiling)
+	state["caught_up"] = caughtUp
+	_ = w.store.UpdateScheduleState(ctx, rangeBackfillTaskID, state)
+
+	completedAt := time.Now().UTC()
+	_ = w.store.UpdateTask(ctx, TaskSnapshot{
+		ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
+		Status: "completed", DesiredStatus: "running", ProgressPct: progress,
+		CurrentValue: int64Ptr(high), TotalValue: int64Ptr(ceiling), Unit: "ids",
+		State: map[string]any{
+			"run_id": runID, "current_id": nextLow, "window_low": low, "window_high": high,
+			"last_count": len(posts), "ceiling": ceiling, "caught_up": caughtUp, "current_step": "completed",
+		},
+		Config: def.Config, StartedAt: &startedAt, CompletedAt: &completedAt, LastRunAt: &completedAt,
+	})
+	log.Info("range backfill window synced", "event", "batch_complete",
+		"low", low, "high", high, "count", len(posts), "caught_up", caughtUp, "ceiling", ceiling)
+}

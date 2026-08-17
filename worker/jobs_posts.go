@@ -224,9 +224,19 @@ func (w *Worker) syncPostsFromRemote(ctx context.Context, page, limit int64, log
 		return 0, nil
 	}
 
+	if err := w.upsertPosts(ctx, posts); err != nil {
+		return 0, err
+	}
+	logger.Info("remote posts synced", "event", "remote_sync_complete", "page", page, "count", len(posts), "duration_ms", time.Since(start).Milliseconds())
+	return len(posts), nil
+}
+
+// upsertPosts writes a batch of raw konachan post objects into the posts table
+// in a single transaction, marking each row for reprocessing.
+func (w *Worker) upsertPosts(ctx context.Context, posts []map[string]any) error {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer tx.Rollback()
 
@@ -237,7 +247,7 @@ func (w *Worker) syncPostsFromRemote(ctx context.Context, page, limit int64, log
 		}
 		raw, err := json.Marshal(post)
 		if err != nil {
-			return 0, err
+			return err
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO posts (id, raw_data, last_synced_at)
@@ -247,12 +257,8 @@ func (w *Worker) syncPostsFromRemote(ctx context.Context, page, limit int64, log
 				last_synced_at = NOW(),
 				is_processed = FALSE`,
 			id, string(raw)); err != nil {
-			return 0, err
+			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	logger.Info("remote posts synced", "event", "remote_sync_complete", "page", page, "count", len(posts), "duration_ms", time.Since(start).Milliseconds())
-	return len(posts), nil
+	return tx.Commit()
 }

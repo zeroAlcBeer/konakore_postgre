@@ -25,6 +25,15 @@ var taskDefs = map[string]TaskDefinition{
 			"pages":    30,
 		},
 	},
+	"range-backfill": {
+		ID:       "range-backfill",
+		Name:     "Backfill explicit posts (konachan.com)",
+		Type:     "periodic",
+		Category: "posts",
+		Config: map[string]any{
+			"source": "konachan.com",
+		},
+	},
 	"sync-tags": {
 		ID:       "sync-tags",
 		Name:     "Sync tags",
@@ -86,7 +95,7 @@ func (w *Worker) seedTasks(ctx context.Context) error {
 		if id == "file-sync" || id == "embeddings-rebuild" {
 			desired = "stopped"
 		}
-		if id == "sync-recent" || id == "sync-tags" {
+		if id == "sync-recent" || id == "sync-tags" || id == "range-backfill" {
 			status = "scheduled"
 		}
 		if err := w.store.SeedTask(ctx, def, status, desired); err != nil {
@@ -99,6 +108,7 @@ func (w *Worker) seedTasks(ctx context.Context) error {
 func (w *Worker) startBackgroundTasks(ctx context.Context) {
 	go w.runBackfill(ctx)
 	go w.runRecentScheduler(ctx)
+	go w.runRangeBackfillScheduler(ctx)
 	go w.runTagsScheduler(ctx)
 	go w.runPostTags(ctx)
 	go w.runLikesMigration(ctx)

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha1"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -40,6 +42,19 @@ type Config struct {
 	FileSyncIdleLimit   int
 	HTTPClientTimeout   time.Duration
 	ShutdownGracePeriod time.Duration
+
+	// Konachan.com (explicit/questionable source behind Cloudflare). konachan.net
+	// is safe-only, so q/e posts must be fetched from konachan.com using a
+	// browser-issued cf_clearance cookie plus moebooru login credentials.
+	KonachanComBase      string
+	KonachanLogin        string
+	KonachanPasswordHash string
+	KonachanCFClearance  string
+	KonachanUserAgent    string
+
+	RangeBackfillInterval time.Duration
+	RangeBackfillStartID  int64
+	RangeBackfillWindow   int64
 }
 
 type Worker struct {
@@ -136,7 +151,32 @@ func loadConfig() Config {
 		FileSyncIdleLimit:   envInt("FILE_SYNC_IDLE_LIMIT", 10),
 		HTTPClientTimeout:   envDuration("WORKER_HTTP_TIMEOUT", 120*time.Second),
 		ShutdownGracePeriod: envDuration("WORKER_SHUTDOWN_GRACE", 10*time.Second),
+
+		KonachanComBase:      envString("KONACHAN_COM_BASE", "https://konachan.com"),
+		KonachanLogin:        envString("KONACHAN_LOGIN", ""),
+		KonachanPasswordHash: konachanPasswordHash(),
+		KonachanCFClearance:  envString("KONACHAN_CF_CLEARANCE", ""),
+		KonachanUserAgent:    envString("KONACHAN_USER_AGENT", ""),
+
+		RangeBackfillInterval: envDuration("RANGE_BACKFILL_INTERVAL", 2*time.Minute),
+		RangeBackfillStartID:  envInt64("RANGE_BACKFILL_START_ID", 404000),
+		RangeBackfillWindow:   envInt64("RANGE_BACKFILL_WINDOW", 100),
 	}
+}
+
+// konachanPasswordHash returns the moebooru-salted SHA1 of the account
+// password. KONACHAN_PASSWORD_HASH takes precedence; otherwise it is derived
+// from KONACHAN_PASSWORD using konachan's salt.
+func konachanPasswordHash() string {
+	if h := os.Getenv("KONACHAN_PASSWORD_HASH"); h != "" {
+		return h
+	}
+	pw := os.Getenv("KONACHAN_PASSWORD")
+	if pw == "" {
+		return ""
+	}
+	sum := sha1.Sum([]byte("So-I-Heard-You-Like-Mupkids-?--" + pw + "--"))
+	return hex.EncodeToString(sum[:])
 }
 
 func envString(key, fallback string) string {
@@ -153,6 +193,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envInt64(key string, fallback int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return fallback
 	}

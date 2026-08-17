@@ -55,9 +55,16 @@ services:
       - ARIA2_URL=${ARIA2_URL:-ws://192.168.0.110:6800/jsonrpc}
       - ARIA2_SECRET=${ARIA2_SECRET:-}
       - DOWNLOAD_BASE_PATH=/wallpaper
+      # konachan.com explicit/questionable backfill (Cloudflare + moebooru auth)
+      - KONACHAN_LOGIN=${KONACHAN_LOGIN:-}
+      - KONACHAN_PASSWORD=${KONACHAN_PASSWORD:-}
+      - KONACHAN_PASSWORD_HASH=${KONACHAN_PASSWORD_HASH:-}
+      - KONACHAN_CF_CLEARANCE=${KONACHAN_CF_CLEARANCE:-}
+      - KONACHAN_USER_AGENT=${KONACHAN_USER_AGENT:-}
+      - RANGE_BACKFILL_INTERVAL=${RANGE_BACKFILL_INTERVAL:-2m}
+      - RANGE_BACKFILL_START_ID=${RANGE_BACKFILL_START_ID:-404000}
+      - RANGE_BACKFILL_WINDOW=${RANGE_BACKFILL_WINDOW:-100}
       - TZ=UTC
-
-  frontend:
     image: ${REGISTRY_URL:-192.168.0.110:5000}/my-konakore-frontend:${FRONTEND_TAG:-latest}
     restart: always
     depends_on:
