@@ -81,18 +81,6 @@ func (w *Worker) fetchKonachanCom(ctx context.Context, tags string, limit int64)
 	return posts, nil
 }
 
-// konachanComMaxID returns the id of the newest post on konachan.com.
-func (w *Worker) konachanComMaxID(ctx context.Context) (int64, error) {
-	posts, err := w.fetchKonachanCom(ctx, "order:id_desc", 1)
-	if err != nil {
-		return 0, err
-	}
-	if len(posts) == 0 {
-		return 0, fmt.Errorf("konachan.com returned no posts for max-id probe")
-	}
-	return asInt64(posts[0]["id"]), nil
-}
-
 // runRangeBackfillScheduler walks id windows on konachan.com to recover the
 // explicit/questionable posts that konachan.net no longer serves, then tails
 // the newest window so freshly uploaded q/e posts keep flowing in.
@@ -112,10 +100,15 @@ func (w *Worker) runRangeBackfillScheduler(ctx context.Context) {
 		return
 	}
 
-	interval := w.cfg.RangeBackfillInterval
-	if interval <= 0 {
-		interval = 2 * time.Minute
+	shortInterval := w.cfg.RangeBackfillInterval
+	if shortInterval <= 0 {
+		shortInterval = 2 * time.Minute
 	}
+	tailInterval := w.cfg.RangeBackfillTailInterval
+	if tailInterval <= 0 {
+		tailInterval = 15 * time.Minute
+	}
+	interval := shortInterval
 	next := time.Now().UTC().Add(interval)
 	_ = w.store.UpdateTask(ctx, TaskSnapshot{
 		ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
@@ -124,25 +117,34 @@ func (w *Worker) runRangeBackfillScheduler(ctx context.Context) {
 		Config: def.Config, NextRunAt: &next,
 	})
 	w.log.Info("range backfill scheduler started", "event", "task_start",
-		"interval", interval.String(), "start_id", w.cfg.RangeBackfillStartID, "window", w.cfg.RangeBackfillWindow)
+		"interval", shortInterval.String(), "tail_interval", tailInterval.String(),
+		"start_id", w.cfg.RangeBackfillStartID, "window", w.cfg.RangeBackfillWindow)
 
 	for {
 		if !sleepContext(ctx, time.Until(next)) {
 			w.markTaskStopped(context.Background(), def, "running", "", "context_cancelled")
 			return
 		}
-		w.runRangeBackfillOnce(ctx)
+		caughtUp := w.runRangeBackfillOnce(ctx)
+		// Once the historical gap is filled we only need to re-check as often as
+		// a window's worth of new posts can appear, so switch to the longer tail
+		// interval and stop probing every short tick.
+		if caughtUp {
+			interval = tailInterval
+		} else {
+			interval = shortInterval
+		}
 		next = time.Now().UTC().Add(interval)
 		_ = w.store.UpdateTask(ctx, TaskSnapshot{
 			ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
 			Status: "scheduled", DesiredStatus: "running", ProgressPct: 100, Unit: "ids",
-			State:  map[string]any{"current_step": "waiting_for_next_run"},
+			State:  map[string]any{"current_step": "waiting_for_next_run", "caught_up": caughtUp},
 			Config: def.Config, NextRunAt: &next,
 		})
 	}
 }
 
-func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
+func (w *Worker) runRangeBackfillOnce(ctx context.Context) (caughtUp bool) {
 	def := taskDef(rangeBackfillTaskID)
 	runID := runID()
 	log := w.log.With("task", rangeBackfillTaskID, "run_id", runID)
@@ -151,7 +153,7 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 	state, err := w.store.GetScheduleState(ctx, rangeBackfillTaskID)
 	if err != nil {
 		w.markTaskError(ctx, def, "running", runID, "load_schedule_state", err)
-		return
+		return false
 	}
 
 	startID := w.cfg.RangeBackfillStartID
@@ -164,25 +166,41 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 		low = startID
 	}
 
-	ceiling, err := w.konachanComMaxID(ctx)
+	// A single newest-first fetch doubles as the ceiling probe: posts[0].id is
+	// the newest post id, and in tail mode this same response already contains
+	// the trailing window, so no separate max-id request is needed.
+	newest, err := w.fetchKonachanCom(ctx, "order:id_desc", window)
 	if err != nil {
-		w.markTaskError(ctx, def, "running", runID, "fetch_max_id", err)
-		return
+		w.markTaskError(ctx, def, "running", runID, "fetch_newest", err)
+		return false
 	}
+	if len(newest) == 0 {
+		w.markTaskError(ctx, def, "running", runID, "fetch_newest", fmt.Errorf("konachan.com returned no posts"))
+		return false
+	}
+	ceiling := asInt64(newest[0]["id"])
 
-	high := low + window - 1
-	caughtUp := false
-	var nextLow int64
-	if high >= ceiling {
-		high = ceiling
+	var posts []map[string]any
+	var high, nextLow int64
+	if low+window-1 >= ceiling {
+		// Caught up: the newest-first fetch above already covers the tail window.
 		caughtUp = true
-		// Tail mode: keep rescanning the newest window so new q/e uploads are
-		// picked up every tick (upsert is idempotent).
+		high = ceiling
+		posts = newest
 		nextLow = ceiling - window + 1
 		if nextLow < startID {
 			nextLow = startID
 		}
 	} else {
+		// Still filling the historical gap: fetch the specific id window.
+		caughtUp = false
+		high = low + window - 1
+		tags := fmt.Sprintf("id:%d..%d order:id_desc", low, high)
+		posts, err = w.fetchKonachanCom(ctx, tags, window)
+		if err != nil {
+			w.markTaskError(ctx, def, "running", runID, "fetch_window", err)
+			return false
+		}
 		nextLow = high + 1
 	}
 
@@ -204,12 +222,6 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 		Config: def.Config, StartedAt: &startedAt, LastRunAt: &startedAt,
 	})
 
-	tags := fmt.Sprintf("id:%d..%d order:id_desc", low, high)
-	posts, err := w.fetchKonachanCom(ctx, tags, window)
-	if err != nil {
-		w.markTaskError(ctx, def, "running", runID, "fetch_window", err)
-		return
-	}
 	// An id-range query returns deleted posts too (unlike page-based browsing,
 	// which hides them). Skip deleted / image-less posts so they don't clutter
 	// the feed with the upstream "deleted" placeholder.
@@ -224,7 +236,7 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 	if len(active) > 0 {
 		if err := w.upsertPosts(ctx, active); err != nil {
 			w.markTaskError(ctx, def, "running", runID, "upsert_window", err)
-			return
+			return false
 		}
 	}
 
@@ -252,4 +264,5 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) {
 	log.Info("range backfill window synced", "event", "batch_complete",
 		"low", low, "high", high, "count", len(active), "skipped_deleted", skipped,
 		"caught_up", caughtUp, "ceiling", ceiling)
+	return caughtUp
 }

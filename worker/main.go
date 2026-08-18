@@ -52,9 +52,10 @@ type Config struct {
 	KonachanCFClearance  string
 	KonachanUserAgent    string
 
-	RangeBackfillInterval time.Duration
-	RangeBackfillStartID  int64
-	RangeBackfillWindow   int64
+	RangeBackfillInterval     time.Duration
+	RangeBackfillTailInterval time.Duration
+	RangeBackfillStartID      int64
+	RangeBackfillWindow       int64
 }
 
 type Worker struct {
@@ -158,9 +159,10 @@ func loadConfig() Config {
 		KonachanCFClearance:  envString("KONACHAN_CF_CLEARANCE", ""),
 		KonachanUserAgent:    envString("KONACHAN_USER_AGENT", ""),
 
-		RangeBackfillInterval: envDuration("RANGE_BACKFILL_INTERVAL", 2*time.Minute),
-		RangeBackfillStartID:  envInt64("RANGE_BACKFILL_START_ID", 404000),
-		RangeBackfillWindow:   envInt64("RANGE_BACKFILL_WINDOW", 100),
+		RangeBackfillInterval:     envDuration("RANGE_BACKFILL_INTERVAL", 2*time.Minute),
+		RangeBackfillTailInterval: envDuration("RANGE_BACKFILL_TAIL_INTERVAL", 15*time.Minute),
+		RangeBackfillStartID:      envInt64("RANGE_BACKFILL_START_ID", 404000),
+		RangeBackfillWindow:       envInt64("RANGE_BACKFILL_WINDOW", 100),
 	}
 }
 
