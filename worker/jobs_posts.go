@@ -255,7 +255,10 @@ func (w *Worker) upsertPosts(ctx context.Context, posts []map[string]any) error 
 			 ON CONFLICT (id) DO UPDATE SET
 				raw_data = EXCLUDED.raw_data,
 				last_synced_at = NOW(),
-				is_processed = FALSE`,
+				is_processed = CASE
+					WHEN posts.raw_data IS DISTINCT FROM EXCLUDED.raw_data THEN FALSE
+					ELSE posts.is_processed
+				END`,
 			id, string(raw)); err != nil {
 			return err
 		}
