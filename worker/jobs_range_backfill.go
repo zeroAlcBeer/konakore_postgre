@@ -171,7 +171,21 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) (caughtUp bool) {
 	// the trailing window, so no separate max-id request is needed.
 	newest, err := w.fetchKonachanCom(ctx, "order:id_desc", window)
 	if err != nil {
+		fp := fingerprintForError(rangeBackfillTaskID, "fetch_newest", err)
 		w.markTaskError(ctx, def, "running", runID, "fetch_newest", err)
+		w.alerter.Push(ctx, AlertEvent{
+			Source:      serviceName,
+			EventID:     "cf_clearance_expired",
+			Severity:    "critical",
+			Fingerprint: fp,
+			Status:      "firing",
+			Message:     fmt.Sprintf("range-backfill fetch failed: %v", err),
+			Context: map[string]string{
+				"task":   rangeBackfillTaskID,
+				"phase":  "fetch_newest",
+				"run_id": runID,
+			},
+		})
 		return false
 	}
 	if len(newest) == 0 {
@@ -198,7 +212,23 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) (caughtUp bool) {
 		tags := fmt.Sprintf("id:%d..%d order:id_desc", low, high)
 		posts, err = w.fetchKonachanCom(ctx, tags, window)
 		if err != nil {
+			fp := fingerprintForError(rangeBackfillTaskID, "fetch_window", err)
 			w.markTaskError(ctx, def, "running", runID, "fetch_window", err)
+			w.alerter.Push(ctx, AlertEvent{
+				Source:      serviceName,
+				EventID:     "cf_clearance_expired",
+				Severity:    "critical",
+				Fingerprint: fp,
+				Status:      "firing",
+				Message:     fmt.Sprintf("range-backfill window fetch failed: %v", err),
+				Context: map[string]string{
+					"task":       rangeBackfillTaskID,
+					"phase":      "fetch_window",
+					"run_id":     runID,
+					"window_low": fmt.Sprintf("%d", low),
+					"window_high": fmt.Sprintf("%d", high),
+				},
+			})
 			return false
 		}
 		nextLow = high + 1
@@ -264,5 +294,20 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) (caughtUp bool) {
 	log.Info("range backfill window synced", "event", "batch_complete",
 		"low", low, "high", high, "count", len(active), "skipped_deleted", skipped,
 		"caught_up", caughtUp, "ceiling", ceiling)
+	// Fetch succeeded — send a resolved alert so the center can notify and
+	// clear the firing state for the cf_clearance fingerprint.
+	w.alerter.Push(ctx, AlertEvent{
+		Source:      serviceName,
+		EventID:     "cf_clearance_expired",
+		Severity:    "critical",
+		Fingerprint: "konakore:cf_clearance:konachan.com",
+		Status:      "resolved",
+		Message:     "range-backfill fetch succeeded, cf_clearance is valid",
+		Context: map[string]string{
+			"task":      rangeBackfillTaskID,
+			"run_id":    runID,
+			"caught_up": fmt.Sprintf("%v", caughtUp),
+		},
+	})
 	return caughtUp
 }

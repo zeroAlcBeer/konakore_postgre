@@ -56,6 +56,9 @@ type Config struct {
 	RangeBackfillTailInterval time.Duration
 	RangeBackfillStartID      int64
 	RangeBackfillWindow       int64
+
+	// Central alerting — push semantic events to alertcenter.
+	AlertcenterURL string
 }
 
 type Worker struct {
@@ -67,6 +70,7 @@ type Worker struct {
 	fileSync              *FileSyncController
 	cleanupCounter        int
 	embeddingsRebuildLock sync.Mutex
+	alerter               *Alerter
 }
 
 func main() {
@@ -98,6 +102,7 @@ func main() {
 		store:      store,
 		log:        logger,
 		httpClient: &http.Client{Timeout: cfg.HTTPClientTimeout},
+		alerter:    NewAlerter(cfg.AlertcenterURL, logger),
 	}
 	worker.fileSync = NewFileSyncController(worker)
 
@@ -159,10 +164,12 @@ func loadConfig() Config {
 		KonachanCFClearance:  envString("KONACHAN_CF_CLEARANCE", ""),
 		KonachanUserAgent:    envString("KONACHAN_USER_AGENT", ""),
 
-		RangeBackfillInterval:     envDuration("RANGE_BACKFILL_INTERVAL", 2*time.Minute),
-		RangeBackfillTailInterval: envDuration("RANGE_BACKFILL_TAIL_INTERVAL", 15*time.Minute),
+		RangeBackfillInterval:     envDuration("RANGE_BACKFILL_INTERVAL", 48*time.Minute),
+		RangeBackfillTailInterval: envDuration("RANGE_BACKFILL_TAIL_INTERVAL", 48*time.Minute),
 		RangeBackfillStartID:      envInt64("RANGE_BACKFILL_START_ID", 404000),
 		RangeBackfillWindow:       envInt64("RANGE_BACKFILL_WINDOW", 100),
+
+		AlertcenterURL: envString("ALERTCENTER_URL", ""),
 	}
 }
 
