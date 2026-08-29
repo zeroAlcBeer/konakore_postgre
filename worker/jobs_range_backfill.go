@@ -179,7 +179,7 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) (caughtUp bool) {
 			Severity:    "critical",
 			Fingerprint: fp,
 			Status:      "firing",
-			Message:     fmt.Sprintf("range-backfill fetch failed: %v", err),
+			Message:     "konachan.com cf_clearance expired (HTTP 403)",
 			Context: map[string]string{
 				"task":   rangeBackfillTaskID,
 				"phase":  "fetch_newest",
@@ -220,7 +220,7 @@ func (w *Worker) runRangeBackfillOnce(ctx context.Context) (caughtUp bool) {
 				Severity:    "critical",
 				Fingerprint: fp,
 				Status:      "firing",
-				Message:     fmt.Sprintf("range-backfill window fetch failed: %v", err),
+				Message:     "konachan.com cf_clearance expired (HTTP 403)",
 				Context: map[string]string{
 					"task":       rangeBackfillTaskID,
 					"phase":      "fetch_window",
