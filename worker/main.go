@@ -147,7 +147,7 @@ func loadConfig() Config {
 		Aria2Secret:      envString("ARIA2_SECRET", ""),
 		DownloadBasePath: envString("DOWNLOAD_BASE_PATH", "/wallpaper"),
 
-		RecentInterval:      envDuration("RECENT_SYNC_INTERVAL", 48*time.Minute),
+		RecentInterval:      envDuration("RECENT_SYNC_INTERVAL", 3*time.Hour),
 		TagsInterval:        envDuration("TAGS_SYNC_INTERVAL", 7*24*time.Hour),
 		BackfillStartDelay:  envDuration("BACKFILL_START_DELAY", 2*time.Second),
 		BackfillRetryDelay:  envDuration("BACKFILL_RETRY_DELAY", 60*time.Second),

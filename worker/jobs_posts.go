@@ -165,15 +165,11 @@ func (w *Worker) runRecentOnce(ctx context.Context) {
 	runID := runID()
 	log := w.log.With("task", taskID, "run_id", runID)
 	startedAt := time.Now().UTC()
-	state, err := w.store.GetScheduleState(ctx, taskID)
-	if err != nil {
-		w.markTaskError(ctx, def, "running", runID, "load_schedule_state", err)
-		return
-	}
-	page := asInt64(state["current_page"])
-	if page <= 0 {
-		page = 1
-	}
+	// Always fetch page 1 (newest 100 posts). With ~27 new posts/day and a
+	// 3h interval, page 1 covers the last 3-4 days — enough to capture new
+	// posts and refresh metadata during the maturity window. Older posts'
+	// score/fav/comment changes are not tracked.
+	const page int64 = 1
 	_ = w.store.UpdateTask(ctx, TaskSnapshot{
 		ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
 		Status: "running", DesiredStatus: "running", ProgressPct: 0,
@@ -187,8 +183,6 @@ func (w *Worker) runRecentOnce(ctx context.Context) {
 		w.markTaskError(ctx, def, "running", runID, "sync_posts", err)
 		return
 	}
-	state["current_page"] = float64((page % 30) + 1)
-	_ = w.store.UpdateScheduleState(ctx, taskID, state)
 	_ = w.store.UpdateTask(ctx, TaskSnapshot{
 		ID: def.ID, Name: def.Name, Type: def.Type, Category: def.Category,
 		Status: "completed", DesiredStatus: "running", ProgressPct: 100,
