@@ -2,8 +2,19 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import PhotoSwipeLightbox from 'photoswipe/lightbox';
 import 'photoswipe/style.css';
 import PhotoSwipeFullscreen from '../utils/photoswipe-fullscreen.esm';
-import { toggleLike } from '../api';
 import { getImageUrl } from '../utils/imageUtils';
+
+const HEART_PATH = 'M16 28.5l-1.8-1.6C7.4 20.8 3 16.8 3 12c0-3.9 3.1-7 7-7 2.2 0 4.3 1 5.6 2.7L16 8l.4-.3C17.7 6 19.8 5 22 5c3.9 0 7 3.1 7 7 0 4.8-4.4 8.8-11.2 14.9L16 28.5z';
+
+// Paint the lightbox heart from the given liked state.
+function paintLikeButton(pswp, liked) {
+  const button = pswp?.element?.querySelector('.pswp__button--like');
+  if (!button) return;
+  const fgPath = button.querySelector('svg path:not(.pswp__icn-shadow)');
+  if (fgPath) {
+    fgPath.setAttribute('fill', liked ? '#f44336' : 'var(--pswp-icon-color, #fff)');
+  }
+}
 
 /**
  * PhotoSwipe lightbox hook，封装初始化、slideshow、like 按钮、caption（Portal）、分组浏览。
@@ -13,17 +24,15 @@ import { getImageUrl } from '../utils/imageUtils';
  * @param {Array} options.allPosts - 全部帖子（含被分组隐藏的）
  * @param {Map}   options.groupMap - parentId → [group members]，可选
  * @param {Function} options.handleTagClick - 点击 caption 中 tag 的回调
- * @param {Function} options.handleLikeChange - (postId, isLiked) => void
- * @param {Object} options.postsLikeState - { [postId]: boolean }
- * @param {Array}  options.posts - 原始 posts（用于查找 liked 状态）
+ * @param {Function} options.onToggleLike - (post) => void; flips post.liked
+ * @param {Array}  options.posts - posts from the query cache (source of liked state)
  */
 export function usePhotoSwipe({
   displayPosts,
   // allPosts — kept in API for future use
   groupMap,
   handleTagClick,
-  handleLikeChange,
-  postsLikeState,
+  onToggleLike,
   posts,
 }) {
   const lightboxRef = useRef(null);
@@ -32,9 +41,8 @@ export function usePhotoSwipe({
   // Flattened dataSource = each parent followed by its grouped children,
   // so the whole page (children included) forms ONE PhotoSwipe gallery.
   const postIdToIndexRef = useRef(null);
-  const postsLikeStateRef = useRef({});
   const postsRef = useRef([]);
-  const handleLikeChangeRef = useRef(handleLikeChange);
+  const onToggleLikeRef = useRef(onToggleLike);
   const handleTagClickRef = useRef(handleTagClick);
 
   // Portal 状态：当前激活的 postId 和 caption 容器 DOM 节点
@@ -43,10 +51,19 @@ export function usePhotoSwipe({
 
   // 同步 refs
   useEffect(() => { groupMapRef.current = groupMap || new Map(); }, [groupMap]);
-  useEffect(() => { postsLikeStateRef.current = postsLikeState; }, [postsLikeState]);
-  useEffect(() => { postsRef.current = posts; }, [posts]);
-  useEffect(() => { handleLikeChangeRef.current = handleLikeChange; }, [handleLikeChange]);
+  useEffect(() => { onToggleLikeRef.current = onToggleLike; }, [onToggleLike]);
   useEffect(() => { handleTagClickRef.current = handleTagClick; }, [handleTagClick]);
+
+  // Repaint the open lightbox's heart whenever the cached posts change
+  // (a like from any path lands in the cache, not in the DOM).
+  useEffect(() => {
+    postsRef.current = posts;
+    const pswp = lightboxRef.current?.pswp;
+    const postId = pswp?.currSlide?.data?.postId;
+    if (!postId) return;
+    const post = posts.find(p => p.id === postId);
+    paintLikeButton(pswp, post?.liked || false);
+  }, [posts]);
 
   // Lazy-init refs that need object allocation (avoid rebuilding every render).
   if (groupMapRef.current === null) groupMapRef.current = new Map();
@@ -151,17 +168,6 @@ export function usePhotoSwipe({
       });
 
       // Like button
-      const HEART_PATH = 'M16 28.5l-1.8-1.6C7.4 20.8 3 16.8 3 12c0-3.9 3.1-7 7-7 2.2 0 4.3 1 5.6 2.7L16 8l.4-.3C17.7 6 19.8 5 22 5c3.9 0 7 3.1 7 7 0 4.8-4.4 8.8-11.2 14.9L16 28.5z';
-
-      const updateLikeButton = (liked) => {
-        const button = pswp.element?.querySelector('.pswp__button--like');
-        if (!button) return;
-        const fgPath = button.querySelector('svg path:not(.pswp__icn-shadow)');
-        if (fgPath) {
-          fgPath.setAttribute('fill', liked ? '#f44336' : 'var(--pswp-icon-color, #fff)');
-        }
-      };
-
       pswp.ui.registerElement({
         name: 'like-button',
         className: 'pswp__button--like',
@@ -179,15 +185,7 @@ export function usePhotoSwipe({
           if (!postId) return false;
 
           const post = postsRef.current.find(p => p.id === postId);
-          const currentLiked = postsLikeStateRef.current.hasOwnProperty(postId)
-            ? postsLikeStateRef.current[postId]
-            : post?.liked || false;
-
-          toggleLike(postId, currentLiked).then(() => {
-            const newLiked = !currentLiked;
-            handleLikeChangeRef.current(postId, newLiked);
-            updateLikeButton(newLiked);
-          }).catch(err => console.error('Like toggle failed:', err));
+          if (post) onToggleLikeRef.current(post);
 
           return false;
         }
@@ -198,10 +196,7 @@ export function usePhotoSwipe({
         const postId = pswp.currSlide?.data?.postId;
         if (!postId) return;
         const post = postsRef.current.find(p => p.id === postId);
-        const isLiked = postsLikeStateRef.current.hasOwnProperty(postId)
-          ? postsLikeStateRef.current[postId]
-          : post?.liked || false;
-        updateLikeButton(isLiked);
+        paintLikeButton(pswp, post?.liked || false);
       });
 
       // Caption container (auto-hide: desktop hot zone + mobile tap toggle)

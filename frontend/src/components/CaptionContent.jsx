@@ -15,11 +15,10 @@ const chipSx = (bg) => ({
   }
 });
 
-const CaptionContent = ({ post, postsLikeState, getTagColors, getTagTranslation, handleTagClick }) => {
+const CaptionContent = ({ post, getTagColors, getTagTranslation, handleTagClick }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const captionColors = theme.palette.caption || {};
-  const isLiked = postsLikeState.hasOwnProperty(post.id) ? postsLikeState[post.id] : post.liked;
 
   return (
       <div style={{
@@ -117,7 +116,7 @@ const CaptionContent = ({ post, postsLikeState, getTagColors, getTagTranslation,
             size="small"
             sx={chipSx(captionColors.date)}
           />
-          {isLiked && (
+          {post.liked && (
             <Chip
               icon={<FavoriteIcon sx={{ color: '#fff !important' }} />}
               label={t('like.liked')}

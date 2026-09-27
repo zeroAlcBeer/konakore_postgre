@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { tagManager } from '../utils/TagManager';
 
 /**
- * 排序函数 — HomePage / FavoritesPage 共用
+ * Sort helper used by PostsPage
  */
 function sortPosts(posts, sortOption) {
   return posts.toSorted((a, b) => {
@@ -163,7 +163,6 @@ function filterGroupsByRelevance(posts, groupMap, threshold, postScoresMap) {
  * @param {Object} options
  * @param {Array}  options.posts            - 原始帖子列表
  * @param {string} options.sortOption       - 排序方式
- * @param {Object} options.postsLikeState   - 本地收藏状态 { [postId]: boolean }
  * @param {Array}  options.excludedTags     - 排除的标签列表（默认 []）
  * @param {number} options.relevanceThreshold - 相关度阈值（默认 0）
  * @param {Map}    options.postScoresMap    - 帖子相关度分数 Map（默认空 Map）
@@ -172,7 +171,6 @@ function filterGroupsByRelevance(posts, groupMap, threshold, postScoresMap) {
 export function usePostsProcessing({
   posts,
   sortOption,
-  postsLikeState,
   excludedTags = [],
   relevanceThreshold = 0,
   postScoresMap = new Map(),
@@ -199,30 +197,22 @@ export function usePostsProcessing({
     return removed;
   }, [posts, relevanceThreshold, postScoresMap]);
 
-  // 主处理管线：合并 like 状态 → 分组 → 排除标签 → 排序 → 相关度过滤
+  // Pipeline: group -> excluded tags -> relevance -> sort
   // 分组在过滤之前，确保父帖被过滤时整组一起移除，子帖不会成为孤儿。
   const { postsForGrid, displayPosts, groupMap } = useMemo(() => {
     if (!posts.length) return { postsForGrid: posts, displayPosts: posts, groupMap: new Map() };
-
-    // 合并本地收藏状态
-    const merged = posts.map(post => ({
-      ...post,
-      liked: postsLikeState.hasOwnProperty(post.id)
-        ? postsLikeState[post.id]
-        : post.liked
-    }));
 
     // 先分组（在过滤之前，确保父帖子帖同进同出）
     let gm = new Map();
     let hiddenIds = new Set();
     if (enableGrouping) {
-      const result = groupPosts(merged);
+      const result = groupPosts(posts);
       gm = result.groupMap;
       hiddenIds = result.hiddenIds;
     }
 
     // 组级排除标签过滤
-    const afterExclude = filterGroupsByExcludedTags(merged, gm, excludedTags);
+    const afterExclude = filterGroupsByExcludedTags(posts, gm, excludedTags);
 
     // 组级相关度过滤
     const afterRelevance = filterGroupsByRelevance(afterExclude, gm, relevanceThreshold, postScoresMap);
@@ -237,7 +227,7 @@ export function usePostsProcessing({
       : sorted;
 
     return { postsForGrid: sorted, displayPosts: dp, groupMap: gm };
-  }, [posts, sortOption, postsLikeState, excludedTags, relevanceThreshold, postScoresMap, enableGrouping]);
+  }, [posts, sortOption, excludedTags, relevanceThreshold, postScoresMap, enableGrouping]);
 
   return {
     postsForGrid,

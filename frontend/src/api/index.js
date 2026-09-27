@@ -38,23 +38,14 @@ export const searchTags = async (query, page = 1, pageSize = 100, liked = null) 
   return response.data;
 };
 
-const likePost = async (postId) => {
+export const likePost = async (postId) => {
   const response = await apiClient.post(`/v1/posts/${postId}:like`);
   return response.data;
 };
 
-const unlikePost = async (postId) => {
+export const unlikePost = async (postId) => {
   const response = await apiClient.post(`/v1/posts/${postId}:unlike`);
   return response.data;
-};
-
-// 保留旧的 toggleLike 函数以保持向后兼容，但内部实现需要先获取当前状态
-export const toggleLike = async (postId, currentLikeState) => {
-  if (currentLikeState) {
-    return await unlikePost(postId);
-  } else {
-    return await likePost(postId);
-  }
 };
 
 export const getUserPreferences = async () => {

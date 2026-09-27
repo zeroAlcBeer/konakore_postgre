@@ -4,7 +4,7 @@ import 'react-photo-album/masonry.css';
 import { Box } from '@mui/material';
 import { getImageUrl } from '../utils/imageUtils';
 
-const MasonryGrid = ({ posts, onImageClick, LazyImageCard, isLoading, onLikeChange, onNotify, groupMap, columnWidth = 260 }) => {
+const MasonryGrid = ({ posts, onImageClick, LazyImageCard, isLoading, onNotify, groupMap, columnWidth = 260 }) => {
   const CardComponent = LazyImageCard;
 
   const photos = useMemo(() =>
@@ -33,13 +33,12 @@ const MasonryGrid = ({ posts, onImageClick, LazyImageCard, isLoading, onLikeChan
         post={photo._post}
         index={index}
         onImageClick={onImageClick}
-        onLikeChange={onLikeChange}
         groupCount={groupMap?.get(photo._post.id)?.length || 0}
         groupMembers={groupMap?.get(photo._post.id) || []}
         onNotify={onNotify}
       />
     </Box>
-  ), [CardComponent, onImageClick, onLikeChange, groupMap, onNotify]);
+  ), [CardComponent, onImageClick, groupMap, onNotify]);
 
   if (!posts.length || isLoading) return null;
 

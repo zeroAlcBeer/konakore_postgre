@@ -19,17 +19,26 @@ import RelevanceFilterModal from '../components/RelevanceFilterModal';
 import ImageSizeModal from '../components/ImageSizeModal';
 import { usePhotoSwipe } from '../hooks/usePhotoSwipe';
 import { usePostsProcessing } from '../hooks/usePostsProcessing';
+import { useToggleLike, POST_LIST_KEY } from '../hooks/useToggleLike';
 import CaptionContent from '../components/CaptionContent';
 import { useTranslation } from 'react-i18next';
 
+// What differs between the main feed and the favorites view.
+const SCOPES = {
+  all: { liked: null, withFilters: true, enableGrouping: true, fetchTagInfo: true, emptyKey: 'status.noResults' },
+  liked: { liked: true, withFilters: false, enableGrouping: false, fetchTagInfo: false, emptyKey: 'status.noFavorites' },
+};
+
+const NO_EXCLUDED_TAGS = [];
+
 // Content body extracted so React preserves its identity across renders.
-function HomePageContent({
+function PostsPageContent({
   isLoading, isError, currentPage, totalPages, perPage, totalPosts,
   sortOption, handleSortChange, handlePageChange, handlePerPageChange,
-  setExcludedTagsOpen, setRelevanceFilterOpen, excludedCountOnPage,
-  relevanceRemovedCount, setImageSizeOpen, groupedDisplayPosts, onImageClick,
-  handleLikeChange, handleNotify, groupMap, columnWidth, isSandbox, sandboxMin,
-  sandboxMax, handleClearSandbox, clearSearch, searchQuery, handleRetry, t,
+  onOpenExcludedTags, onOpenRelevanceFilter, excludedCountOnPage,
+  relevanceRemovedCount, onOpenImageSize, displayPosts, onImageClick,
+  handleNotify, groupMap, columnWidth, isSandbox, sandboxMin,
+  sandboxMax, handleClearSandbox, clearSearch, searchQuery, handleRetry, emptyKey, t,
 }) {
   if (isLoading) {
     return (
@@ -60,23 +69,22 @@ function HomePageContent({
         totalItems={totalPosts}
         sortOption={sortOption}
         onSortChange={handleSortChange}
-        onOpenExcludedTags={() => setExcludedTagsOpen(true)}
-        onOpenRelevanceFilter={() => setRelevanceFilterOpen(true)}
+        onOpenExcludedTags={onOpenExcludedTags}
+        onOpenRelevanceFilter={onOpenRelevanceFilter}
         excludedCountOnPage={excludedCountOnPage}
         relevanceRemovedCount={relevanceRemovedCount}
-        onOpenImageSize={() => setImageSizeOpen(true)}
-        visibleCount={groupedDisplayPosts.length}
+        onOpenImageSize={onOpenImageSize}
+        visibleCount={displayPosts.length}
         sandboxMin={isSandbox ? sandboxMin : null}
         sandboxMax={isSandbox ? sandboxMax : null}
         onClearSandbox={handleClearSandbox}
       />
-      {groupedDisplayPosts.length > 0 ? (
+      {displayPosts.length > 0 ? (
         <MasonryGrid
-          posts={groupedDisplayPosts}
+          posts={displayPosts}
           onImageClick={onImageClick}
           LazyImageCard={LazyImageCard}
           isLoading={isLoading}
-          onLikeChange={handleLikeChange}
           onNotify={handleNotify}
           groupMap={groupMap}
           columnWidth={columnWidth}
@@ -84,7 +92,7 @@ function HomePageContent({
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 8 }}>
           <EmptyIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
-          <Typography color="text.secondary">{t('status.noResults')}</Typography>
+          <Typography color="text.secondary">{t(emptyKey)}</Typography>
           {searchQuery && (
             <Button variant="outlined" size="small" onClick={clearSearch}>{t('actions.clearSearch')}</Button>
           )}
@@ -151,30 +159,34 @@ function uiStateReducer(state, action) {
 }
 
 // Modals group — extracted so the parent stays under the size limit.
-function HomePageModals({
-  excludedTagsOpen, relevanceFilterOpen, imageSizeOpen, excludedTags,
+function PostsPageModals({
+  withFilters, excludedTagsOpen, relevanceFilterOpen, imageSizeOpen, excludedTags,
   handleExcludedTagsChange, excludedCountOnPage, posts, totalPosts,
   relevanceThreshold, handleRelevanceThresholdChange, postScoresMap,
   columnWidth, handleColumnWidthChange, dispatch,
 }) {
   return (
     <>
-      <ExcludedTagsModal
-        open={excludedTagsOpen}
-        onClose={() => dispatch({ type: 'CLOSE_EXCLUDED_TAGS' })}
-        excludedTags={excludedTags}
-        onExcludedTagsChange={handleExcludedTagsChange}
-        excludedCountOnPage={excludedCountOnPage}
-      />
-      <RelevanceFilterModal
-        open={relevanceFilterOpen}
-        onClose={() => dispatch({ type: 'CLOSE_RELEVANCE_FILTER' })}
-        posts={posts}
-        totalPosts={totalPosts}
-        threshold={relevanceThreshold}
-        onThresholdChange={handleRelevanceThresholdChange}
-        postScoresMap={postScoresMap}
-      />
+      {withFilters && (
+        <>
+          <ExcludedTagsModal
+            open={excludedTagsOpen}
+            onClose={() => dispatch({ type: 'CLOSE_EXCLUDED_TAGS' })}
+            excludedTags={excludedTags}
+            onExcludedTagsChange={handleExcludedTagsChange}
+            excludedCountOnPage={excludedCountOnPage}
+          />
+          <RelevanceFilterModal
+            open={relevanceFilterOpen}
+            onClose={() => dispatch({ type: 'CLOSE_RELEVANCE_FILTER' })}
+            posts={posts}
+            totalPosts={totalPosts}
+            threshold={relevanceThreshold}
+            onThresholdChange={handleRelevanceThresholdChange}
+            postScoresMap={postScoresMap}
+          />
+        </>
+      )}
       <ImageSizeModal
         open={imageSizeOpen}
         onClose={() => dispatch({ type: 'CLOSE_IMAGE_SIZE' })}
@@ -185,96 +197,82 @@ function HomePageModals({
   );
 }
 
-// Data fetching + processing — extracted so HomePage stays readable.
-function useHomePageData({ searchQuery, currentPage, perPage, sortOption, postsLikeState, excludedTags, relevanceThreshold, isSandbox, sandboxMin, sandboxMax }) {
-  const { data: postsData, isLoading: postsLoading, isError: postsErr, refetch: refetchPosts } = useQuery({
-    queryKey: ['posts', currentPage, perPage],
-    queryFn: () => getPosts(currentPage, perPage),
+// Data fetching + processing — extracted so the page stays readable.
+// All post lists share the POST_LIST_KEY prefix so likes update them in one place.
+function usePostsPageData({ scope, searchQuery, currentPage, perPage, sortOption, excludedTags, relevanceThreshold, isSandbox, sandboxMin, sandboxMax }) {
+  const { liked, enableGrouping } = SCOPES[scope];
+
+  const feedQuery = useQuery({
+    queryKey: [POST_LIST_KEY, scope, 'feed', currentPage, perPage],
+    queryFn: () => getPosts(currentPage, perPage, liked),
     enabled: !searchQuery && !isSandbox,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: sandboxData, isLoading: sandboxLoading, isError: sandboxErr } = useQuery({
-    queryKey: ['posts-sandbox', sandboxMin, sandboxMax, currentPage, perPage],
-    queryFn: () => getSandboxPosts(sandboxMin, sandboxMax, currentPage, perPage),
+  const sandboxQuery = useQuery({
+    queryKey: [POST_LIST_KEY, scope, 'sandbox', sandboxMin, sandboxMax, currentPage, perPage],
+    queryFn: () => getSandboxPosts(sandboxMin, sandboxMax, currentPage, perPage, liked),
     enabled: isSandbox && !searchQuery,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: searchData, isLoading: searchLoading, isError: searchErr, refetch: refetchSearch } = useQuery({
-    queryKey: ['search', searchQuery, currentPage, perPage],
-    queryFn: () => searchTags(searchQuery, currentPage, perPage),
+  const searchQueryResult = useQuery({
+    queryKey: [POST_LIST_KEY, scope, 'search', searchQuery, currentPage, perPage],
+    queryFn: () => searchTags(searchQuery, currentPage, perPage, liked),
     enabled: !!searchQuery,
   });
 
-  let posts = [];
-  let isLoading = false;
-  let isError = false;
-  let totalPages = 0;
-  let totalPosts = 0;
+  const active = searchQuery ? searchQueryResult : (isSandbox ? sandboxQuery : feedQuery);
+  const activeData = active.data;
+  const posts = activeData?.posts || [];
+  const totalPages = activeData?.pagination?.total_pages || 0;
+  const totalPosts = activeData?.pagination?.total_items || 0;
 
-  if (searchQuery) {
-    posts = searchData?.posts || [];
-    isLoading = searchLoading;
-    isError = searchErr;
-    totalPages = searchData?.pagination?.total_pages || 0;
-    totalPosts = searchData?.pagination?.total_items || 0;
-  } else if (isSandbox) {
-    posts = sandboxData?.posts || [];
-    isLoading = sandboxLoading;
-    isError = sandboxErr;
-    totalPages = sandboxData?.pagination?.total_pages || 0;
-    totalPosts = sandboxData?.pagination?.total_items || 0;
-  } else {
-    posts = postsData?.posts || [];
-    isLoading = postsLoading;
-    isError = postsErr;
-    totalPages = postsData?.pagination?.total_pages || 0;
-    totalPosts = postsData?.pagination?.total_items || 0;
-  }
-
-  const postScoresSource = searchQuery ? searchData : (isSandbox ? sandboxData : postsData);
   const postScoresMap = useMemo(() => {
     const map = new Map();
-    const sourcePosts = postScoresSource?.posts;
+    const sourcePosts = activeData?.posts;
     if (!sourcePosts?.length) return map;
     sourcePosts.forEach(post => {
       if (post.similarity != null) map.set(post.id, post.similarity);
     });
     return map;
-  }, [postScoresSource]);
+  }, [activeData]);
 
   const {
     postsForGrid,
-    displayPosts: groupedDisplayPosts,
+    displayPosts,
     groupMap,
     excludedCountOnPage,
     relevanceRemovedCount,
   } = usePostsProcessing({
     posts,
     sortOption,
-    postsLikeState,
     excludedTags,
     relevanceThreshold,
     postScoresMap,
-    enableGrouping: true,
+    enableGrouping,
   });
 
   return {
-    posts, postsForGrid, groupedDisplayPosts, groupMap,
+    posts, postsForGrid, displayPosts, groupMap,
     excludedCountOnPage, relevanceRemovedCount, postScoresMap,
-    isLoading, isError, totalPages, totalPosts,
-    refetchPosts, refetchSearch,
+    isLoading: active.isLoading, isError: active.isError, totalPages, totalPosts,
+    refetch: active.refetch,
   };
 }
 
-const HomePage = () => {
+/**
+ * Post grid page shared by the main feed (scope="all") and favorites
+ * (scope="liked"). Mount with a distinct `key` per scope so UI state resets
+ * when switching routes.
+ */
+const PostsPage = ({ scope = 'all' }) => {
+  const { withFilters, fetchTagInfo: shouldFetchTagInfo, emptyKey } = SCOPES[scope];
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [ui, dispatch] = useReducer(uiStateReducer, undefined, uiStateInit);
-  const [postsLikeState, setPostsLikeState] = useState({});
 
-  // 排除标签和相关度阈值，从 tagManager 初始化
+  // Excluded tags and relevance threshold, restored from tagManager
   const [excludedTags, setExcludedTags] = useState(() => {
     const config = tagManager.getExcludedPostTagsConfig();
     return Array.isArray(config?.tags) ? config.tags : [];
@@ -292,6 +290,11 @@ const HomePage = () => {
     dispatch({ type: 'CLOSE_SNACKBAR' });
   }, []);
 
+  const { mutate: setLiked } = useToggleLike({ onNotify: handleNotify });
+  const handleToggleLike = useCallback((post) => {
+    setLiked({ postId: post.id, liked: !post.liked });
+  }, [setLiked]);
+
   const {
     fetchTagInfo,
     addTagsToCache,
@@ -299,7 +302,6 @@ const HomePage = () => {
     mergeTagsWithCache,
     getTagColors,
     getTagTranslation,
-    isLoading: tagsLoading
   } = useTag();
 
   const { searchQuery, currentPage, perPage, sortOption, excludedTagsOpen, relevanceFilterOpen, imageSizeOpen, columnWidth, snackbar } = ui;
@@ -314,8 +316,9 @@ const HomePage = () => {
     dispatch({ type: 'CLEAR_SANDBOX' });
   }, [setSearchParams]);
 
-  // 当页面或筛选条件变化时，获取并缓存tag信息
+  // Fetch and cache tag info when the page changes (main feed only)
   useEffect(() => {
+    if (!shouldFetchTagInfo) return undefined;
     const fetchTagInfoData = async () => {
       try {
         await fetchTagInfo(currentPage, perPage, null);
@@ -325,18 +328,18 @@ const HomePage = () => {
     };
     const timeoutId = setTimeout(fetchTagInfoData, 300);
     return () => clearTimeout(timeoutId);
-  }, [currentPage, perPage, fetchTagInfo]);
-
-  const handleLikeChange = useCallback((postId, isLiked) => {
-    setPostsLikeState(prev => ({ ...prev, [postId]: isLiked }));
-  }, []);
+  }, [shouldFetchTagInfo, currentPage, perPage, fetchTagInfo]);
 
   const {
-    posts, postsForGrid, groupedDisplayPosts, groupMap,
+    posts, postsForGrid, displayPosts, groupMap,
     excludedCountOnPage, relevanceRemovedCount, postScoresMap,
-    isLoading, isError, totalPages, totalPosts,
-    refetchPosts, refetchSearch,
-  } = useHomePageData({ searchQuery, currentPage, perPage, sortOption, postsLikeState, excludedTags, relevanceThreshold, isSandbox, sandboxMin, sandboxMax });
+    isLoading, isError, totalPages, totalPosts, refetch,
+  } = usePostsPageData({
+    scope, searchQuery, currentPage, perPage, sortOption,
+    excludedTags: withFilters ? excludedTags : NO_EXCLUDED_TAGS,
+    relevanceThreshold: withFilters ? relevanceThreshold : 0,
+    isSandbox, sandboxMin, sandboxMax,
+  });
 
   // --- EVENT HANDLERS ---
   const handleSearch = (query) => dispatch({ type: 'SEARCH', query });
@@ -358,7 +361,6 @@ const HomePage = () => {
   const handleSortChange = (newSortOption) => {
     dispatch({ type: 'SET_SORT', sortOption: newSortOption });
   };
-
 
   const handleExcludedTagsChange = (newTags) => {
     setExcludedTags(newTags);
@@ -396,34 +398,25 @@ const HomePage = () => {
 
   // --- PHOTOSWIPE ---
   const { onImageClick, activePostId, captionContainerRef, closeLightboxAndSearch } = usePhotoSwipe({
-    displayPosts: groupedDisplayPosts,
-    allPosts: postsForGrid,
-    groupMap: groupMap,
+    displayPosts,
+    groupMap,
     handleTagClick,
-    handleLikeChange,
-    postsLikeState,
+    onToggleLike: handleToggleLike,
     posts,
   });
 
-  // 找到当前 caption 对应的 post（从所有 posts 中查找，包括分组中的）
+  // Caption post, looked up among all posts including grouped children
   const activePost = useMemo(() => {
     if (!activePostId) return null;
     return postsForGrid.find(p => p.id === activePostId) || null;
   }, [activePostId, postsForGrid]);
 
-  const handleRetry = useCallback(() => {
-    if (searchQuery) {
-      refetchSearch();
-    } else {
-      refetchPosts();
-    }
-  }, [searchQuery, refetchSearch, refetchPosts]);
-
   // --- RENDER ---
 
   return (
     <AppLayout>
-      <HomePageModals
+      <PostsPageModals
+        withFilters={withFilters}
         excludedTagsOpen={excludedTagsOpen}
         relevanceFilterOpen={relevanceFilterOpen}
         imageSizeOpen={imageSizeOpen}
@@ -458,7 +451,7 @@ const HomePage = () => {
         flexDirection: 'column',
         alignItems: 'stretch',
       }}>
-        <HomePageContent
+        <PostsPageContent
           isLoading={isLoading}
           isError={isError}
           currentPage={currentPage}
@@ -469,14 +462,13 @@ const HomePage = () => {
           handleSortChange={handleSortChange}
           handlePageChange={handlePageChange}
           handlePerPageChange={handlePerPageChange}
-          setExcludedTagsOpen={(open) => open ? dispatch({ type: 'OPEN_EXCLUDED_TAGS' }) : dispatch({ type: 'CLOSE_EXCLUDED_TAGS' })}
-          setRelevanceFilterOpen={(open) => open ? dispatch({ type: 'OPEN_RELEVANCE_FILTER' }) : dispatch({ type: 'CLOSE_RELEVANCE_FILTER' })}
+          onOpenExcludedTags={withFilters ? () => dispatch({ type: 'OPEN_EXCLUDED_TAGS' }) : undefined}
+          onOpenRelevanceFilter={withFilters ? () => dispatch({ type: 'OPEN_RELEVANCE_FILTER' }) : undefined}
           excludedCountOnPage={excludedCountOnPage}
           relevanceRemovedCount={relevanceRemovedCount}
-          setImageSizeOpen={(open) => open ? dispatch({ type: 'OPEN_IMAGE_SIZE' }) : dispatch({ type: 'CLOSE_IMAGE_SIZE' })}
-          groupedDisplayPosts={groupedDisplayPosts}
+          onOpenImageSize={() => dispatch({ type: 'OPEN_IMAGE_SIZE' })}
+          displayPosts={displayPosts}
           onImageClick={onImageClick}
-          handleLikeChange={handleLikeChange}
           handleNotify={handleNotify}
           groupMap={groupMap}
           columnWidth={columnWidth}
@@ -486,7 +478,8 @@ const HomePage = () => {
           handleClearSandbox={handleClearSandbox}
           clearSearch={clearSearch}
           searchQuery={searchQuery}
-          handleRetry={handleRetry}
+          handleRetry={refetch}
+          emptyKey={emptyKey}
           t={t}
         />
       </Box>
@@ -495,7 +488,6 @@ const HomePage = () => {
       {activePost && captionContainerRef.current && createPortal(
         <CaptionContent
           post={activePost}
-          postsLikeState={postsLikeState}
           getTagColors={getTagColors}
           getTagTranslation={getTagTranslation}
           handleTagClick={closeLightboxAndSearch}
@@ -517,4 +509,4 @@ const HomePage = () => {
   );
 };
 
-export default HomePage;
+export default PostsPage;

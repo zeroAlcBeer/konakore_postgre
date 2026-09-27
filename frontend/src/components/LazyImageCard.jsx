@@ -4,10 +4,8 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useInView } from 'react-intersection-observer';
-import { useTranslation } from 'react-i18next';
-import { toggleLike } from '../api';
+import { useToggleLike } from '../hooks/useToggleLike';
 import { getImageUrl } from '../utils/imageUtils';
 import { connectivityService } from '../utils/ConnectivityService';
 
@@ -104,11 +102,8 @@ function LikeButton({ isLiked, isPending, onClick }) {
   );
 }
 
-const LazyImageCard = ({ post, index, onImageClick, onLikeChange, onNotify, groupCount, groupMembers = EMPTY_MEMBERS }) => {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
+const LazyImageCard = ({ post, index, onImageClick, onNotify, groupCount, groupMembers = EMPTY_MEMBERS }) => {
   const [imageState, dispatch] = useReducer(imageStateReducer, undefined, imageStateInit);
-  const [isLiked, setIsLiked] = useState(() => post.liked);
   const [isOffline, setIsOffline] = useState(() => !connectivityService.isOnline);
   const [hovered, setHovered] = useState(false);
   const imgRef = useRef(null);
@@ -169,34 +164,12 @@ const LazyImageCard = ({ post, index, onImageClick, onLikeChange, onNotify, grou
     connectivityService.reportFailure();
   };
 
-  const mutation = useMutation({
-    mutationFn: () => toggleLike(post.id, isLiked),
-    onSuccess: (data) => {
-      const newLikedState = !isLiked;
-      setIsLiked(newLikedState);
-      // Keep the posts list cache in sync after a like toggle.
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      queryClient.invalidateQueries({ queryKey: ['favorites'] });
-      if (onLikeChange) {
-        onLikeChange(post.id, newLikedState);
-      }
-      onNotify?.({
-        message: data.message || (newLikedState ? t('like.added') : t('like.removed')),
-        severity: 'success'
-      });
-    },
-    onError: (error) => {
-      console.error('Toggle like error:', error);
-      onNotify?.({
-        message: t('like.failed'),
-        severity: 'error'
-      });
-    }
-  });
+  // Liked state comes from the query cache via props; the hook updates it.
+  const { mutate: setLiked, isPending: likePending } = useToggleLike({ onNotify });
 
   const handleLike = (e) => {
     e.stopPropagation();
-    mutation.mutate();
+    setLiked({ postId: post.id, liked: !post.liked });
   };
 
   const imageUrl = getImageUrl(post.data?.preview_url);
@@ -345,8 +318,8 @@ const LazyImageCard = ({ post, index, onImageClick, onLikeChange, onNotify, grou
 
               {imageState.loaded && (
                 <LikeButton
-                  isLiked={isLiked}
-                  isPending={mutation.isPending}
+                  isLiked={post.liked}
+                  isPending={likePending}
                   onClick={handleLike}
                 />
               )}

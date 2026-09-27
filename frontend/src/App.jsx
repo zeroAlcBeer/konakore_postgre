@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import FavoritesPage from './pages/FavoritesPage';
+import PostsPage from './pages/PostsPage';
 import StatsPage from './pages/StatsPage';
 import TasksPage from './pages/TasksPage';
 import { TagProvider } from './contexts/TagContext';
@@ -11,8 +10,8 @@ function App() {
     <TagProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/favorites" element={<FavoritesPage />} />
+          <Route path="/" element={<PostsPage key="all" scope="all" />} />
+          <Route path="/favorites" element={<PostsPage key="liked" scope="liked" />} />
           <Route path="/stats" element={<StatsPage />} />
           <Route path="/tasks" element={<TasksPage />} />
         </Routes>
