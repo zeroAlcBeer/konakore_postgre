@@ -79,6 +79,15 @@ var taskDefs = map[string]TaskDefinition{
 			"batch_size": 100,
 		},
 	},
+	"post-families": {
+		ID:       "post-families",
+		Name:     "Refresh post families",
+		Type:     "worker",
+		Category: "post_families",
+		Config: map[string]any{
+			"interval": "1m",
+		},
+	},
 	"embeddings-rebuild": {
 		ID:       "embeddings-rebuild",
 		Name:     "Rebuild tag embeddings",
@@ -113,6 +122,7 @@ func (w *Worker) startBackgroundTasks(ctx context.Context) {
 	go w.runPostTags(ctx)
 	go w.runLikesMigration(ctx)
 	go w.runEmbeddings(ctx)
+	go w.runFamiliesRefresher(ctx)
 }
 
 func taskDef(id string) TaskDefinition {

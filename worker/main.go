@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -71,6 +72,7 @@ type Worker struct {
 	cleanupCounter        int
 	embeddingsRebuildLock sync.Mutex
 	alerter               *Alerter
+	familiesDirty         atomic.Bool // set by posts writers; see jobs_families.go
 }
 
 func main() {

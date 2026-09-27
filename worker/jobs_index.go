@@ -627,7 +627,11 @@ func (w *Worker) upsertPostAndConsumeLike(ctx context.Context, finalID int64, ra
 	if _, err := tx.ExecContext(ctx, `DELETE FROM likes WHERE id = $1`, originalLikeID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	w.markFamiliesDirty()
+	return nil
 }
 
 // resolveMissingTagsViaAPI looks up tag names that are referenced by the

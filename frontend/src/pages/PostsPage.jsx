@@ -26,7 +26,7 @@ import { useTranslation } from 'react-i18next';
 // What differs between the main feed and the favorites view.
 const SCOPES = {
   all: { liked: null, withFilters: true, enableGrouping: true, fetchTagInfo: true, emptyKey: 'status.noResults' },
-  liked: { liked: true, withFilters: false, enableGrouping: false, fetchTagInfo: false, emptyKey: 'status.noFavorites' },
+  liked: { liked: true, withFilters: false, enableGrouping: true, fetchTagInfo: false, emptyKey: 'status.noFavorites' },
 };
 
 const NO_EXCLUDED_TAGS = [];

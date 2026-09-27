@@ -22,6 +22,10 @@ class Post(BaseModel):
         default=None,
         description="Cosine similarity between this post's tag embedding and the user profile, in [0,1]. NULL when either side has no embedding.",
     )
+    family_id: Optional[int] = Field(
+        default=None,
+        description="Parent/child family this post belongs to; posts with the same value form one group. May name a post not stored locally.",
+    )
 
     class Config:
         json_schema_extra = {
@@ -313,6 +317,7 @@ def db_post_to_api(db_row: dict) -> dict:
         "liked": db_row.get("is_liked", False),
         "update_time": db_row["last_synced_at"],
         "similarity": db_row.get("similarity"),
+        "family_id": db_row.get("family_id"),
     }
 
 

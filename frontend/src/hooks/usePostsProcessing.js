@@ -10,7 +10,9 @@ function sortPosts(posts, sortOption) {
       case 'score':
         return (b.data.score || 0) - (a.data.score || 0);
       case 'id':
-        return (b.id || 0) - (a.id || 0);
+        // Keep the API order: families newest-first by their head, members
+        // after it. Re-sorting by id would scatter a family's members.
+        return 0;
       case 'similarity':
         // post.similarity comes from the API (cosine to user profile).
         // null (post not embedded yet) sorts to the bottom.
@@ -63,29 +65,28 @@ function filterByRelevance(posts, threshold, postScoresMap) {
 }
 
 /**
- * 帖子分组（parent/child 合并显示）
- * Returns groupMap: parentId → [parent, ...children], and hiddenIds (child ids).
+ * Group posts by family (post.family_id from the API; a post without one is
+ * its own family). The API pages by family, so a page holds whole families.
+ * Returns groupMap: representativeId -> [representative, ...others] for
+ * families with 2+ posts on the page, and hiddenIds (the non-representatives).
+ * The representative is the family root when present, else the newest member.
  */
 function groupPosts(posts) {
-  const childrenByParent = new Map();
-  const postById = new Map();
-
+  const membersByFamily = new Map();
   posts.forEach(post => {
-    postById.set(post.id, post);
-    const parentId = post.data?.parent_id;
-    if (parentId && parentId !== post.id) {
-      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
-      childrenByParent.get(parentId).push(post);
-    }
+    const familyId = post.family_id ?? post.id;
+    if (!membersByFamily.has(familyId)) membersByFamily.set(familyId, []);
+    membersByFamily.get(familyId).push(post);
   });
 
   const hiddenIds = new Set();
   const groupMap = new Map();
-  childrenByParent.forEach((children, parentId) => {
-    if (postById.has(parentId)) {
-      children.forEach(child => hiddenIds.add(child.id));
-      groupMap.set(parentId, [postById.get(parentId), ...children]);
-    }
+  membersByFamily.forEach((members, familyId) => {
+    if (members.length < 2) return;
+    const representative = members.find(m => m.id === familyId) || members[0];
+    const others = members.filter(m => m !== representative);
+    others.forEach(m => hiddenIds.add(m.id));
+    groupMap.set(representative.id, [representative, ...others]);
   });
 
   return { groupMap, hiddenIds };
@@ -93,32 +94,21 @@ function groupPosts(posts) {
 
 /**
  * Apply excluded-tags filter at the GROUP level.
- * A group survives if its parent survives; orphan children are filtered individually.
+ * The representative's tags decide for its whole group.
  */
 function filterGroupsByExcludedTags(posts, groupMap, excludedTags) {
   if (!excludedTags.length) return posts;
-  const parentIds = new Set(groupMap.keys());
-  return posts.filter(post => {
-    const isParent = parentIds.has(post.id);
-    const isChild = groupMap.has(post.data?.parent_id) &&
-      groupMap.get(post.data.parent_id).some(m => m.id === post.id);
-    // If this post is a group parent, its filter result governs the whole group.
-    // If it's a child, it was already hidden by grouping — keep it only if
-    // its parent passed (handled by parent filter below).
+  const passes = (post) => {
     const tagsString = tagManager.getPostTagsString(post);
     if (!tagsString) return true;
     const postTags = tagsString.split(' ').filter(Boolean);
-    const passes = !excludedTags.some(t => postTags.includes(t));
-    if (isParent) return passes;
-    // Non-parent, non-grouped-child: filter individually
-    if (!isChild) return passes;
-    // Grouped child: only keep if parent passes (so groupMap stays intact)
-    const parent = groupMap.get(post.data.parent_id)[0];
-    const parentTagsString = tagManager.getPostTagsString(parent);
-    if (!parentTagsString) return true;
-    const parentTags = parentTagsString.split(' ').filter(Boolean);
-    return !excludedTags.some(t => parentTags.includes(t));
+    return !excludedTags.some(t => postTags.includes(t));
+  };
+  const memberToRepresentative = new Map();
+  groupMap.forEach(members => {
+    members.forEach(m => memberToRepresentative.set(m.id, members[0]));
   });
+  return posts.filter(post => passes(memberToRepresentative.get(post.id) || post));
 }
 
 /**

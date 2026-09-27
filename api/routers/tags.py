@@ -13,6 +13,7 @@ from models import (
     db_post_to_api, db_tag_to_api
 )
 from utils import get_db_connection
+from families import fetch_filtered_families_page, count_filtered_families
 
 router = APIRouter(prefix="/v1/tags", tags=["tags"])
 logger = logging.getLogger(__name__)
@@ -151,79 +152,20 @@ def search_tags(request: SearchTagsRequestBody = Body(...)):
                 )
             
             tag_id = tag["id"]
-            
-            # Get total count
+
+            # Paged by family (see families.py); only tagged members are shown.
+            match = "EXISTS (SELECT 1 FROM post_tags pt WHERE pt.post_id = {id} AND pt.tag_id = %s)"
             if liked_filter is True:
-                cur.execute(
-                    """
-                    SELECT COUNT(*)
-                    FROM posts p
-                    JOIN post_tags pt ON p.id = pt.post_id
-                    WHERE pt.tag_id = %s AND p.is_liked = TRUE
-                    """,
-                    (tag_id,)
-                )
+                match += " AND {p}.is_liked = TRUE"
             elif liked_filter is False:
-                cur.execute(
-                    """
-                    SELECT COUNT(*)
-                    FROM posts p
-                    JOIN post_tags pt ON p.id = pt.post_id
-                    WHERE pt.tag_id = %s AND p.is_liked = FALSE
-                    """,
-                    (tag_id,)
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT COUNT(*)
-                    FROM posts p
-                    JOIN post_tags pt ON p.id = pt.post_id
-                    WHERE pt.tag_id = %s
-                    """,
-                    (tag_id,)
-                )
-            total_count = cur.fetchone()['count']
-            
-            # Get paginated data
-            if liked_filter is True:
-                cur.execute(
-                    """
-                    SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at
-                    FROM posts p
-                    JOIN post_tags pt ON p.id = pt.post_id
-                    WHERE pt.tag_id = %s AND p.is_liked = TRUE
-                    ORDER BY p.id DESC
-                    LIMIT %s OFFSET %s
-                    """,
-                    (tag_id, page_size, offset)
-                )
-            elif liked_filter is False:
-                cur.execute(
-                    """
-                    SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at
-                    FROM posts p
-                    JOIN post_tags pt ON p.id = pt.post_id
-                    WHERE pt.tag_id = %s AND p.is_liked = FALSE
-                    ORDER BY p.id DESC
-                    LIMIT %s OFFSET %s
-                    """,
-                    (tag_id, page_size, offset)
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at
-                    FROM posts p
-                    JOIN post_tags pt ON p.id = pt.post_id
-                    WHERE pt.tag_id = %s
-                    ORDER BY p.id DESC
-                    LIMIT %s OFFSET %s
-                    """,
-                    (tag_id, page_size, offset)
-                )
-            db_posts = cur.fetchall()
-            
+                match += " AND {p}.is_liked = FALSE"
+            params = (tag_id,)
+            total_count = count_filtered_families(cur, match, params)
+            # Search results never carried similarity; keep that behavior.
+            db_posts = fetch_filtered_families_page(
+                cur, match, params, page_size, offset, with_similarity=False
+            )
+
             # Convert to API models
             posts = [Post(**db_post_to_api(row)) for row in db_posts]
             

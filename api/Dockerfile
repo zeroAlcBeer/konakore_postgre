@@ -13,6 +13,7 @@ RUN uv venv && uv pip install -r pyproject.toml
 COPY api/api.py .
 COPY api/models.py .
 COPY api/utils.py .
+COPY api/families.py .
 COPY api/routers/ ./routers/
 
 # Expose the port the API will run on

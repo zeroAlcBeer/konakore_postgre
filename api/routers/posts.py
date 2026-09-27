@@ -12,9 +12,15 @@ from models import (
     db_post_to_api
 )
 from utils import get_db_connection, trigger_file_sync, trigger_profile_update
+from families import (
+    fetch_all_families_page, estimate_all_families_count,
+    fetch_filtered_families_page, count_filtered_families,
+)
 
 router = APIRouter(prefix="/v1/posts", tags=["posts"])
 logger = logging.getLogger(__name__)
+
+LIKED_MATCH = "{p}.is_liked = TRUE"
 
 
 @router.get("", response_model=ListPostsResponse)
@@ -26,7 +32,11 @@ def list_posts(
 ):
     """
     List posts with pagination.
-    
+
+    The unfiltered and liked lists page by family (see families.py): `limit`
+    and the totals count families, and each page carries every matching
+    member of its families.
+
     Supports filtering by liked status or by artists from liked posts.
     
     - liked: Filter posts by like status
@@ -88,12 +98,13 @@ def list_posts(
                 
                 # Get paginated data for liked_artists filter
                 cur.execute("""
-                    SELECT DISTINCT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at,
+                    SELECT DISTINCT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at, d.family_id,
                            CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
                                 THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
                                 ELSE NULL
                            END AS similarity
                     FROM posts p
+                    LEFT JOIN post_derived d ON d.post_id = p.id
                     LEFT JOIN user_profile up ON up.id = 1
                     WHERE EXISTS (
                         SELECT 1
@@ -115,52 +126,18 @@ def list_posts(
                     ORDER BY p.id DESC
                     LIMIT %s OFFSET %s
                 """, (limit, offset))
+                # Paged by post, not by family; unused by the frontend.
+                db_posts = cur.fetchall()
 
             elif liked_filter is True:
-                # Original liked filter logic
-                cur.execute("SELECT COUNT(*) FROM posts WHERE is_liked = TRUE")
-                total_count = cur.fetchone()['count']
-
-                cur.execute("""
-                    SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at,
-                           CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
-                                THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
-                                ELSE NULL
-                           END AS similarity
-                    FROM posts p
-                    LEFT JOIN user_profile up ON up.id = 1
-                    WHERE p.is_liked = TRUE
-                    ORDER BY p.id DESC LIMIT %s OFFSET %s
-                """, (limit, offset))
+                total_count = count_filtered_families(cur, LIKED_MATCH, ())
+                db_posts = fetch_filtered_families_page(cur, LIKED_MATCH, (), limit, offset)
 
             else:
-                # No filter - return all posts.
-                # Use the planner's row estimate instead of an exact COUNT(*),
-                # which would scan the whole ~333k-row table on every page
-                # view just to render pagination totals.
-                cur.execute(
-                    "SELECT reltuples::bigint AS estimate FROM pg_class WHERE relname = 'posts'"
-                )
-                row = cur.fetchone()
-                total_count = row['estimate'] if row else None
-                if total_count is None or total_count < 0:
-                    # Estimate unavailable (table never analyzed) - fall back.
-                    cur.execute("SELECT COUNT(*) FROM posts")
-                    total_count = cur.fetchone()['count']
+                # No filter - page over precomputed family heads.
+                total_count = estimate_all_families_count(cur)
+                db_posts = fetch_all_families_page(cur, limit, offset)
 
-                cur.execute("""
-                    SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at,
-                           CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
-                                THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
-                                ELSE NULL
-                           END AS similarity
-                    FROM posts p
-                    LEFT JOIN user_profile up ON up.id = 1
-                    ORDER BY p.id DESC LIMIT %s OFFSET %s
-                """, (limit, offset))
-            
-            db_posts = cur.fetchall()
-            
             # Convert to API models
             posts = [Post(**db_post_to_api(row)) for row in db_posts]
             
@@ -188,7 +165,7 @@ def list_posts_sandbox(
     liked: Optional[bool] = Query(default=None, description="Filter by liked status"),
 ):
     """
-    List posts within a specific ID range with pagination.
+    List posts within a specific ID range, paged by family (see families.py).
     Used for sandbox mode when navigating from Stats distribution chart.
     """
     if id_min > id_max:
@@ -199,41 +176,12 @@ def list_posts_sandbox(
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            range_clause = "id >= %s AND id <= %s"
-            range_params = (id_min, id_max)
-
-            similarity_expr = """
-                CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
-                     THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
-                     ELSE NULL
-                END AS similarity
-            """
-            range_p = "p.id >= %s AND p.id <= %s"
-
+            match = "{id} >= %s AND {id} <= %s"
             if liked is True:
-                cur.execute(f"SELECT COUNT(*) as count FROM posts WHERE {range_clause} AND is_liked = TRUE", range_params)
-                total_count = cur.fetchone()['count']
-                cur.execute(
-                    f"""SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at, {similarity_expr}
-                        FROM posts p
-                        LEFT JOIN user_profile up ON up.id = 1
-                        WHERE {range_p} AND p.is_liked = TRUE
-                        ORDER BY p.id DESC LIMIT %s OFFSET %s""",
-                    (*range_params, limit, offset)
-                )
-            else:
-                cur.execute(f"SELECT COUNT(*) as count FROM posts WHERE {range_clause}", range_params)
-                total_count = cur.fetchone()['count']
-                cur.execute(
-                    f"""SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at, {similarity_expr}
-                        FROM posts p
-                        LEFT JOIN user_profile up ON up.id = 1
-                        WHERE {range_p}
-                        ORDER BY p.id DESC LIMIT %s OFFSET %s""",
-                    (*range_params, limit, offset)
-                )
-
-            db_posts = cur.fetchall()
+                match += " AND {p}.is_liked = TRUE"
+            params = (id_min, id_max)
+            total_count = count_filtered_families(cur, match, params)
+            db_posts = fetch_filtered_families_page(cur, match, params, limit, offset)
             posts = [Post(**db_post_to_api(row)) for row in db_posts]
             total_pages = (total_count + limit - 1) // limit
 
@@ -278,12 +226,13 @@ def get_post(post_id: int):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                """SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at,
+                """SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at, d.family_id,
                           CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
                                THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
                                ELSE NULL
                           END AS similarity
                    FROM posts p
+                   LEFT JOIN post_derived d ON d.post_id = p.id
                    LEFT JOIN user_profile up ON up.id = 1
                    WHERE p.id = %s""",
                 (post_id,)

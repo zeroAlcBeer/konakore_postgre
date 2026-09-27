@@ -257,5 +257,9 @@ func (w *Worker) upsertPosts(ctx context.Context, posts []map[string]any) error 
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	w.markFamiliesDirty()
+	return nil
 }
