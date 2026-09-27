@@ -23,6 +23,32 @@ func (w *Worker) konachanComConfigured() bool {
 		w.cfg.KonachanUserAgent != ""
 }
 
+// konachanComAuthFor returns the Cloudflare clearance cookie and its matching
+// User-Agent for a request to rawURL. Both are empty unless rawURL is on the
+// konachan.com host (or a subdomain) and a clearance is configured: the
+// cookie is scoped to that host and must never be sent anywhere else, and
+// Cloudflare rejects it when the User-Agent differs from the browser that
+// obtained it.
+func (w *Worker) konachanComAuthFor(rawURL string) (cookie, userAgent string) {
+	if w.cfg.KonachanCFClearance == "" || w.cfg.KonachanUserAgent == "" {
+		return "", ""
+	}
+	target, err := url.Parse(rawURL)
+	if err != nil {
+		return "", ""
+	}
+	base, err := url.Parse(w.cfg.KonachanComBase)
+	if err != nil {
+		return "", ""
+	}
+	host := strings.ToLower(target.Hostname())
+	baseHost := strings.ToLower(base.Hostname())
+	if baseHost == "" || (host != baseHost && !strings.HasSuffix(host, "."+baseHost)) {
+		return "", ""
+	}
+	return "cf_clearance=" + w.cfg.KonachanCFClearance, w.cfg.KonachanUserAgent
+}
+
 // newKonachanComRequest builds an authenticated konachan.com post.json request
 // that replays a browser cf_clearance cookie so Cloudflare lets it through.
 func (w *Worker) newKonachanComRequest(ctx context.Context, tags string, limit int64) (*http.Request, error) {

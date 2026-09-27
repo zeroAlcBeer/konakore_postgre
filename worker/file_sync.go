@@ -315,7 +315,8 @@ func (w *Worker) createDownloadTask(ctx context.Context, postID int64, raw map[s
 	if downloadURL == "" {
 		return fmt.Errorf("no download url")
 	}
-	if err := validateDownloadURL(ctx, w.httpClient, downloadURL); err != nil {
+	cookie, userAgent := w.konachanComAuthFor(downloadURL)
+	if err := validateDownloadURL(ctx, w.httpClient, downloadURL, cookie, userAgent); err != nil {
 		return fmt.Errorf("download url validation failed: %w", err)
 	}
 	idxDir := getIdxPath(w.cfg.DownloadBasePath, postID)
@@ -326,7 +327,14 @@ func (w *Worker) createDownloadTask(ctx context.Context, postID int64, raw map[s
 	filename := buildFilename(postID, tags, downloadURL)
 	filePath := filepath.Join(idxDir, filename)
 
-	ariaParams := []any{[]string{downloadURL}, map[string]any{"dir": idxDir, "out": filename}}
+	ariaOptions := map[string]any{"dir": idxDir, "out": filename}
+	if cookie != "" {
+		ariaOptions["header"] = []string{"Cookie: " + cookie}
+	}
+	if userAgent != "" {
+		ariaOptions["user-agent"] = userAgent
+	}
+	ariaParams := []any{[]string{downloadURL}, ariaOptions}
 	gid, ariaLog, err := w.sendAria2Request(ctx, "aria2.addUri", ariaParams)
 	if err != nil {
 		return err
@@ -342,7 +350,11 @@ func (w *Worker) createDownloadTask(ctx context.Context, postID int64, raw map[s
 	return nil
 }
 
+// sendAria2Request calls aria2 over JSON-RPC and returns the gid plus a log
+// record of the call. The log is stored in file_sync.aria_log, so it omits
+// the RPC token and redacts request headers (they carry cf_clearance).
 func (w *Worker) sendAria2Request(ctx context.Context, method string, params []any) (string, string, error) {
+	loggedParams := redactAriaParams(params)
 	if w.cfg.Aria2Secret != "" {
 		params = append([]any{"token:" + w.cfg.Aria2Secret}, params...)
 	}
@@ -375,8 +387,29 @@ func (w *Worker) sendAria2Request(ctx context.Context, method string, params []a
 		return "", "", fmt.Errorf("aria2 error: %v", result.Error)
 	}
 	gid := fmt.Sprint(result.Result)
-	ariaLog, _ := json.Marshal(map[string]any{"gid": gid, "method": method, "params": params})
+	ariaLog, _ := json.Marshal(map[string]any{"gid": gid, "method": method, "params": loggedParams})
 	return gid, string(ariaLog), nil
+}
+
+// redactAriaParams copies params with any "header" option replaced.
+func redactAriaParams(params []any) []any {
+	out := make([]any, len(params))
+	for i, param := range params {
+		options, ok := param.(map[string]any)
+		if !ok {
+			out[i] = param
+			continue
+		}
+		copied := make(map[string]any, len(options))
+		for key, value := range options {
+			copied[key] = value
+		}
+		if _, has := copied["header"]; has {
+			copied["header"] = "[redacted]"
+		}
+		out[i] = copied
+	}
+	return out
 }
 
 func (w *Worker) checkDownloadStatus(ctx context.Context, runID string) (int, error) {

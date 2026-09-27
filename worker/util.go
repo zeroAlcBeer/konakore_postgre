@@ -175,10 +175,18 @@ func preferredDownload(raw map[string]any, logger *slog.Logger) (downloadURL str
 	return downloadURL, expectedSize, ext
 }
 
-func validateDownloadURL(ctx context.Context, client *http.Client, downloadURL string) error {
+// validateDownloadURL HEADs downloadURL; cookie and userAgent are sent when
+// non-empty (Cloudflare-protected hosts need both).
+func validateDownloadURL(ctx context.Context, client *http.Client, downloadURL, cookie, userAgent string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, downloadURL, nil)
 	if err != nil {
 		return err
+	}
+	if cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
