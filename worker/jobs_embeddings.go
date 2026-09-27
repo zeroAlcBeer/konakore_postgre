@@ -210,15 +210,15 @@ func (w *Worker) computePostEmbedding(ctx context.Context, postID int64, vocab *
 func (w *Worker) countUnembedded(ctx context.Context) (int64, error) {
 	var n int64
 	err := w.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM posts WHERE is_processed = TRUE AND tag_embedding IS NULL`).Scan(&n)
+		`SELECT COUNT(*) FROM post_derived WHERE is_processed AND tag_embedding IS NULL`).Scan(&n)
 	return n, err
 }
 
 func (w *Worker) embedPostsBatch(ctx context.Context, log *slog.Logger, vocab *Vocabulary, limit int) (int, error) {
 	rows, err := w.db.QueryContext(ctx,
-		`SELECT id FROM posts
-		 WHERE is_processed = TRUE AND tag_embedding IS NULL
-		 ORDER BY id LIMIT $1`, limit)
+		`SELECT post_id FROM post_derived
+		 WHERE is_processed AND tag_embedding IS NULL
+		 ORDER BY post_id LIMIT $1`, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -250,7 +250,7 @@ func (w *Worker) embedPostsBatch(ctx context.Context, log *slog.Logger, vocab *V
 			continue
 		}
 		if _, err := w.db.ExecContext(ctx,
-			`UPDATE posts SET tag_embedding = $1::sparsevec WHERE id = $2`, lit, id); err != nil {
+			`UPDATE post_derived SET tag_embedding = $1::sparsevec WHERE post_id = $2`, lit, id); err != nil {
 			log.Warn("update embedding failed", "event", "embed_update_failed", "post_id", id, "error", err)
 			continue
 		}
@@ -406,13 +406,13 @@ func (w *Worker) runEmbeddingsRebuild(ctx context.Context) error {
 
 	var total int64
 	if err := w.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM posts WHERE is_processed = TRUE`).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM post_derived WHERE is_processed`).Scan(&total); err != nil {
 		w.markTaskError(ctx, def, "stopped", rid, "count_posts", err)
 		return err
 	}
 
 	rows, err := w.db.QueryContext(ctx,
-		`SELECT id FROM posts WHERE is_processed = TRUE ORDER BY id`)
+		`SELECT post_id FROM post_derived WHERE is_processed ORDER BY post_id`)
 	if err != nil {
 		w.markTaskError(ctx, def, "stopped", rid, "select_posts", err)
 		return err
@@ -441,7 +441,7 @@ func (w *Worker) runEmbeddingsRebuild(ctx context.Context) error {
 			continue
 		}
 		if _, err := w.db.ExecContext(ctx,
-			`UPDATE posts SET tag_embedding = $1::sparsevec WHERE id = $2`, lit, id); err != nil {
+			`UPDATE post_derived SET tag_embedding = $1::sparsevec WHERE post_id = $2`, lit, id); err != nil {
 			log.Warn("update failed", "event", "embed_update_failed", "post_id", id, "error", err)
 			continue
 		}
@@ -635,8 +635,10 @@ func (w *Worker) rebuildVocabulary(ctx context.Context) (newAdded, deactivated i
 // the like/unlike HTTP endpoint — full recompute avoids floating-point drift.
 func (w *Worker) rebuildUserProfile(ctx context.Context) error {
 	rows, err := w.db.QueryContext(ctx,
-		`SELECT tag_embedding::text FROM posts
-		 WHERE is_liked = TRUE AND tag_embedding IS NOT NULL`)
+		`SELECT d.tag_embedding::text
+		 FROM post_likes l
+		 JOIN post_derived d ON d.post_id = l.post_id
+		 WHERE d.tag_embedding IS NOT NULL`)
 	if err != nil {
 		return err
 	}
@@ -689,7 +691,7 @@ func (w *Worker) rebuildUserProfile(ctx context.Context) error {
 func (w *Worker) updateUserProfileForLike(ctx context.Context, postID int64) error {
 	var hasEmbedding bool
 	err := w.db.QueryRowContext(ctx,
-		`SELECT tag_embedding IS NOT NULL FROM posts WHERE id = $1`, postID).Scan(&hasEmbedding)
+		`SELECT tag_embedding IS NOT NULL FROM post_derived WHERE post_id = $1`, postID).Scan(&hasEmbedding)
 	if err == sql.ErrNoRows {
 		return nil
 	}

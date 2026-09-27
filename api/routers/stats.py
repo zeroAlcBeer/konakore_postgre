@@ -47,7 +47,7 @@ def get_stats_overview():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Check if cache is valid
-            cur.execute("SELECT COUNT(*) as count FROM posts WHERE is_liked = TRUE")
+            cur.execute("SELECT COUNT(*) as count FROM post_likes")
             liked_count = cur.fetchone()['count']
 
             if (_stats_cache['result'] is not None
@@ -75,8 +75,9 @@ def get_stats_overview():
                     SELECT
                         width_bucket(id, %(min_id)s, %(max_id_exc)s, %(num_buckets)s) AS bucket,
                         COUNT(*) AS total_count,
-                        COUNT(*) FILTER (WHERE is_liked = TRUE) AS liked_count
+                        COUNT(l.post_id) AS liked_count
                     FROM posts
+                    LEFT JOIN post_likes l ON l.post_id = posts.id
                     GROUP BY bucket
                     ORDER BY bucket
                 """, {
@@ -107,8 +108,9 @@ def get_stats_overview():
                 SELECT
                     raw_data->>'rating' AS rating,
                     COUNT(*) AS total_count,
-                    COUNT(*) FILTER (WHERE is_liked = TRUE) AS liked_count
+                    COUNT(l.post_id) AS liked_count
                 FROM posts
+                LEFT JOIN post_likes l ON l.post_id = posts.id
                 WHERE raw_data->>'rating' IS NOT NULL
                 GROUP BY raw_data->>'rating'
                 ORDER BY raw_data->>'rating'
@@ -167,7 +169,7 @@ def get_stats_distribution(
             q_max = id_max if id_max is not None else global_max
 
             # Get current liked count for cache key
-            cur.execute("SELECT COUNT(*) as count FROM posts WHERE is_liked = TRUE")
+            cur.execute("SELECT COUNT(*) as count FROM post_likes")
             liked_count = cur.fetchone()['count']
 
             cache_key = (q_min, q_max, liked_count)
@@ -184,8 +186,9 @@ def get_stats_distribution(
                     SELECT
                         width_bucket(id, %(q_min)s, %(q_max_exc)s, %(num_buckets)s) AS bucket,
                         COUNT(*) AS total_count,
-                        COUNT(*) FILTER (WHERE is_liked = TRUE) AS liked_count
+                        COUNT(l.post_id) AS liked_count
                     FROM posts
+                    LEFT JOIN post_likes l ON l.post_id = posts.id
                     WHERE id >= %(q_min)s AND id <= %(q_max)s
                     GROUP BY bucket
                     ORDER BY bucket

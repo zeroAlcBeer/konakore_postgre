@@ -8,25 +8,39 @@ so a group is never split across pages. Families are ordered by their
 head, the newest matching member; members follow their head, newest first.
 
 A filter is an SQL predicate template with its parameters. It may use
-`{id}` for the post id and `{p}` for the posts row, e.g. "{p}.is_liked = TRUE".
+`{id}` for the post id and `{p}` for the posts row, e.g. "{id} >= %s".
 posts is joined only when `{p}` is used: it is the wide table, and filters on
 the id alone (tag, id range) run far faster over the narrow post_derived.
 The filter is applied to members, so a partially matching family shows only
 its matching members.
 """
 
+# Liked filters for the templates below; likes live in post_likes.
+LIKED_MATCH = "EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = {id})"
+NOT_LIKED_MATCH = "NOT " + LIKED_MATCH
+
 SIMILARITY_EXPR = """
-    CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
-         THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
+    CASE WHEN d.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
+         THEN NULLIF(1 - (d.tag_embedding <=> up.embedding), 'NaN'::float8)
          ELSE NULL
     END AS similarity"""
 
 NO_SIMILARITY_EXPR = "NULL::float8 AS similarity"
 
 
-def _post_columns(with_similarity: bool) -> str:
+def post_columns(with_similarity: bool = True) -> str:
+    """
+    Select list for one API post row. Expects aliases p (posts), d
+    (post_derived, may be LEFT JOINed) and up (user_profile) in scope;
+    column names match what models.db_post_to_api reads.
+    """
     similarity = SIMILARITY_EXPR if with_similarity else NO_SIMILARITY_EXPR
-    return f"p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at, d.family_id, {similarity}"
+    return (
+        "p.id, p.raw_data, p.last_synced_at, d.family_id, "
+        "COALESCE(d.is_processed, FALSE) AS is_processed, "
+        "EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id) AS is_liked, "
+        f"{similarity}"
+    )
 
 
 def fetch_all_families_page(cur, limit: int, offset: int):
@@ -39,7 +53,7 @@ def fetch_all_families_page(cur, limit: int, offset: int):
             ORDER BY post_id DESC
             LIMIT %s OFFSET %s
         )
-        SELECT {_post_columns(True)}
+        SELECT {post_columns(True)}
         FROM heads h
         JOIN post_derived d ON d.family_id = h.family_id
         JOIN posts p ON p.id = d.post_id
@@ -97,7 +111,7 @@ def fetch_filtered_families_page(cur, match: str, params: tuple, limit: int, off
             ORDER BY d.post_id DESC
             LIMIT %s OFFSET %s
         )
-        SELECT {_post_columns(with_similarity)}
+        SELECT {post_columns(with_similarity)}
         FROM heads h
         JOIN post_derived d ON d.family_id = h.family_id
         JOIN posts p ON p.id = d.post_id

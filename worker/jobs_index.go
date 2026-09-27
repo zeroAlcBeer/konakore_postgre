@@ -106,7 +106,7 @@ func (w *Worker) runPostTags(ctx context.Context) {
 func (w *Worker) countUnprocessedPosts(ctx context.Context) (int64, error) {
 	var count int64
 	err := w.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM posts WHERE is_processed = FALSE`).Scan(&count)
+		`SELECT COUNT(*) FROM post_derived WHERE NOT is_processed`).Scan(&count)
 	return count, err
 }
 
@@ -116,7 +116,11 @@ func (w *Worker) processPostTagsBatch(ctx context.Context, log *slog.Logger, lim
 		Raw map[string]any
 	}
 	rows, err := w.db.QueryContext(ctx,
-		`SELECT id, raw_data FROM posts WHERE is_processed = FALSE ORDER BY id LIMIT $1`, limit)
+		`SELECT p.id, p.raw_data
+		 FROM post_derived d
+		 JOIN posts p ON p.id = d.post_id
+		 WHERE NOT d.is_processed
+		 ORDER BY d.post_id LIMIT $1`, limit)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -220,7 +224,7 @@ func (w *Worker) processPostTagsBatch(ctx context.Context, log *slog.Logger, lim
 			}
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE posts SET is_processed = TRUE WHERE id = $1`, post.ID); err != nil {
+			`UPDATE post_derived SET is_processed = TRUE WHERE post_id = $1`, post.ID); err != nil {
 			return 0, len(posts), err
 		}
 		if len(skippedNames) > 0 {
@@ -446,18 +450,16 @@ func (w *Worker) processLikesBatch(ctx context.Context, limit int) (int, error) 
 		if !existing[id] {
 			continue
 		}
-		res, err := tx.ExecContext(ctx,
-			`UPDATE posts SET is_liked = TRUE WHERE id = $1`, id)
-		if err != nil {
+		// The post exists (checked above), so the legacy like is consumed
+		// whether or not it was already liked.
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO post_likes (post_id) VALUES ($1) ON CONFLICT (post_id) DO NOTHING`, id); err != nil {
 			return 0, err
 		}
-		affected, _ := res.RowsAffected()
-		if affected > 0 {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM likes WHERE id = $1`, id); err != nil {
-				return 0, err
-			}
-			processed++
+		if _, err := tx.ExecContext(ctx, `DELETE FROM likes WHERE id = $1`, id); err != nil {
+			return 0, err
 		}
+		processed++
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
@@ -536,8 +538,8 @@ func (w *Worker) processOrphanLikesBatch(ctx context.Context, log *slog.Logger, 
 }
 
 // resolveOrphanLike walks the konachan parent_id chain to find an active replacement
-// for an orphan like. When found, the active post is upserted locally with is_liked
-// set; when the chain dead-ends or konachan returns nothing, the legacy like row is
+// for an orphan like. When found, the active post is upserted locally and liked
+// in post_likes; when the chain dead-ends or konachan returns nothing, the legacy like row is
 // dropped. Returning a non-nil error means the orphan is untouched and should be
 // retried on the next cycle (typically a network/transient issue).
 func (w *Worker) resolveOrphanLike(ctx context.Context, log *slog.Logger, originalID int64) (orphanOutcome, error) {
@@ -618,10 +620,14 @@ func (w *Worker) upsertPostAndConsumeLike(ctx context.Context, finalID int64, ra
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, `
-        INSERT INTO posts (id, raw_data, is_liked, is_processed, last_synced_at)
-        VALUES ($1, $2::jsonb, TRUE, FALSE, NOW())
-        ON CONFLICT (id) DO UPDATE SET is_liked = TRUE`,
+        INSERT INTO posts (id, raw_data, last_synced_at)
+        VALUES ($1, $2::jsonb, NOW())
+        ON CONFLICT (id) DO NOTHING`,
 		finalID, string(rawBytes)); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO post_likes (post_id) VALUES ($1) ON CONFLICT (post_id) DO NOTHING`, finalID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM likes WHERE id = $1`, originalLikeID); err != nil {

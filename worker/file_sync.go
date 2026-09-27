@@ -203,9 +203,9 @@ func (w *Worker) fileSyncStats(ctx context.Context) (FileSyncStats, error) {
 	stats := FileSyncStats{}
 	err := w.db.QueryRowContext(ctx,
 		`SELECT COUNT(*)
-		 FROM posts p
-		 LEFT JOIN file_sync fs ON p.id = fs.post_id AND fs.sync_status NOT IN ('DELETED')
-		 WHERE p.is_liked = TRUE AND fs.post_id IS NULL`).Scan(&stats.PendingLiked)
+		 FROM post_likes l
+		 LEFT JOIN file_sync fs ON l.post_id = fs.post_id AND fs.sync_status NOT IN ('DELETED')
+		 WHERE fs.post_id IS NULL`).Scan(&stats.PendingLiked)
 	if err != nil {
 		return stats, err
 	}
@@ -240,9 +240,10 @@ func (w *Worker) checkLikedPosts(ctx context.Context, runID string) (int, error)
 	log := w.log.With("task", "file-sync", "run_id", runID, "phase", "liked_posts")
 	rows, err := w.db.QueryContext(ctx,
 		`SELECT p.id, p.raw_data
-		 FROM posts p
+		 FROM post_likes l
+		 JOIN posts p ON p.id = l.post_id
 		 LEFT JOIN file_sync fs ON p.id = fs.post_id AND fs.sync_status NOT IN ('DELETED')
-		 WHERE p.is_liked = TRUE AND fs.post_id IS NULL
+		 WHERE fs.post_id IS NULL
 		 ORDER BY p.id DESC
 		 LIMIT 100`)
 	if err != nil {
@@ -480,7 +481,7 @@ func (w *Worker) cleanupByDatabase(ctx context.Context, runID string) (int, erro
 		 JOIN posts p ON fs.post_id = p.id
 		 WHERE fs.sync_status = 'COMPLETE'
 		   AND fs.is_deleted = FALSE
-		   AND p.is_liked = FALSE
+		   AND NOT EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id)
 		 LIMIT 100`)
 	if err != nil {
 		return 0, err
@@ -552,7 +553,8 @@ func (w *Worker) cleanupByFilesystem(ctx context.Context, runID string, maxDirs 
 			continue
 		}
 		rows, err := w.db.QueryContext(ctx,
-			`SELECT id, is_liked FROM posts WHERE id = ANY($1)`, pq.Array(ids))
+			`SELECT p.id, EXISTS (SELECT 1 FROM post_likes l WHERE l.post_id = p.id)
+			 FROM posts p WHERE p.id = ANY($1)`, pq.Array(ids))
 		if err != nil {
 			return deleted, err
 		}

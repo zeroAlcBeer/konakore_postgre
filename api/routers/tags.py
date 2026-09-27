@@ -13,7 +13,9 @@ from models import (
     db_post_to_api, db_tag_to_api
 )
 from utils import get_db_connection
-from families import fetch_filtered_families_page, count_filtered_families
+from families import (
+    LIKED_MATCH, NOT_LIKED_MATCH, fetch_filtered_families_page, count_filtered_families,
+)
 
 router = APIRouter(prefix="/v1/tags", tags=["tags"])
 logger = logging.getLogger(__name__)
@@ -56,7 +58,7 @@ def list_tags(
             # Get posts in the specified range
             if liked_filter is True:
                 cur.execute(
-                    "SELECT id FROM posts WHERE is_liked = TRUE ORDER BY id DESC LIMIT %s OFFSET %s",
+                    "SELECT post_id AS id FROM post_likes ORDER BY post_id DESC LIMIT %s OFFSET %s",
                     (limit, offset)
                 )
             else:
@@ -156,9 +158,9 @@ def search_tags(request: SearchTagsRequestBody = Body(...)):
             # Paged by family (see families.py); only tagged members are shown.
             match = "EXISTS (SELECT 1 FROM post_tags pt WHERE pt.post_id = {id} AND pt.tag_id = %s)"
             if liked_filter is True:
-                match += " AND {p}.is_liked = TRUE"
+                match += " AND " + LIKED_MATCH
             elif liked_filter is False:
-                match += " AND {p}.is_liked = FALSE"
+                match += " AND " + NOT_LIKED_MATCH
             params = (tag_id,)
             total_count = count_filtered_families(cur, match, params)
             # Search results never carried similarity; keep that behavior.

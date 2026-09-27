@@ -13,14 +13,13 @@ from models import (
 )
 from utils import get_db_connection, trigger_file_sync, trigger_profile_update
 from families import (
+    LIKED_MATCH, post_columns,
     fetch_all_families_page, estimate_all_families_count,
     fetch_filtered_families_page, count_filtered_families,
 )
 
 router = APIRouter(prefix="/v1/posts", tags=["posts"])
 logger = logging.getLogger(__name__)
-
-LIKED_MATCH = "{p}.is_liked = TRUE"
 
 
 @router.get("", response_model=ListPostsResponse)
@@ -86,10 +85,9 @@ def list_posts(
                         AND t.id IN (
                             SELECT DISTINCT pt2.tag_id
                             FROM post_tags pt2
-                            INNER JOIN posts p2 ON pt2.post_id = p2.id
+                            INNER JOIN post_likes l2 ON l2.post_id = pt2.post_id
                             INNER JOIN tags t2 ON pt2.tag_id = t2.id
-                            WHERE p2.is_liked = TRUE
-                            AND t2.type = 1
+                            WHERE t2.type = 1
                             AND t2.name != 'tagme_(artist)'
                         )
                     )
@@ -97,12 +95,8 @@ def list_posts(
                 total_count = cur.fetchone()['count']
                 
                 # Get paginated data for liked_artists filter
-                cur.execute("""
-                    SELECT DISTINCT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at, d.family_id,
-                           CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
-                                THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
-                                ELSE NULL
-                           END AS similarity
+                cur.execute(f"""
+                    SELECT DISTINCT {post_columns()}
                     FROM posts p
                     LEFT JOIN post_derived d ON d.post_id = p.id
                     LEFT JOIN user_profile up ON up.id = 1
@@ -116,10 +110,9 @@ def list_posts(
                         AND t.id IN (
                             SELECT DISTINCT pt2.tag_id
                             FROM post_tags pt2
-                            INNER JOIN posts p2 ON pt2.post_id = p2.id
+                            INNER JOIN post_likes l2 ON l2.post_id = pt2.post_id
                             INNER JOIN tags t2 ON pt2.tag_id = t2.id
-                            WHERE p2.is_liked = TRUE
-                            AND t2.type = 1
+                            WHERE t2.type = 1
                             AND t2.name != 'tagme_(artist)'
                         )
                     )
@@ -178,7 +171,7 @@ def list_posts_sandbox(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             match = "{id} >= %s AND {id} <= %s"
             if liked is True:
-                match += " AND {p}.is_liked = TRUE"
+                match += " AND " + LIKED_MATCH
             params = (id_min, id_max)
             total_count = count_filtered_families(cur, match, params)
             db_posts = fetch_filtered_families_page(cur, match, params, limit, offset)
@@ -212,7 +205,7 @@ def get_page_for_id(
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             if liked is True:
-                cur.execute("SELECT COUNT(*) as count FROM posts WHERE id > %s AND is_liked = TRUE", (id,))
+                cur.execute("SELECT COUNT(*) as count FROM post_likes WHERE post_id > %s", (id,))
             else:
                 cur.execute("SELECT COUNT(*) as count FROM posts WHERE id > %s", (id,))
             position = cur.fetchone()['count']
@@ -226,11 +219,7 @@ def get_post(post_id: int):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                """SELECT p.id, p.raw_data, p.is_processed, p.is_liked, p.last_synced_at, d.family_id,
-                          CASE WHEN p.tag_embedding IS NOT NULL AND up.embedding IS NOT NULL
-                               THEN NULLIF(1 - (p.tag_embedding <=> up.embedding), 'NaN'::float8)
-                               ELSE NULL
-                          END AS similarity
+                f"""SELECT {post_columns()}
                    FROM posts p
                    LEFT JOIN post_derived d ON d.post_id = p.id
                    LEFT JOIN user_profile up ON up.id = 1
@@ -256,24 +245,20 @@ def like_post(post_id: int):
     """
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Check if post exists and get current status
-            cur.execute("SELECT id, is_liked FROM posts WHERE id = %s", (post_id,))
-            post = cur.fetchone()
-            
-            if not post:
+            cur.execute("SELECT 1 FROM posts WHERE id = %s", (post_id,))
+            if not cur.fetchone():
                 raise HTTPException(
                     status_code=404,
                     detail=f"Post with id {post_id} not found"
                 )
-            
-            # Set liked status to true
-            was_already_liked = post["is_liked"]
+
+            cur.execute(
+                "INSERT INTO post_likes (post_id) VALUES (%s) ON CONFLICT (post_id) DO NOTHING RETURNING post_id",
+                (post_id,)
+            )
+            was_already_liked = cur.fetchone() is None
+            conn.commit()
             if not was_already_liked:
-                cur.execute(
-                    "UPDATE posts SET is_liked = TRUE WHERE id = %s",
-                    (post_id,)
-                )
-                conn.commit()
                 trigger_profile_update(post_id)
 
                 # Trigger file_sync service for newly liked post
@@ -299,24 +284,17 @@ def unlike_post(post_id: int):
     """
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Check if post exists and get current status
-            cur.execute("SELECT id, is_liked FROM posts WHERE id = %s", (post_id,))
-            post = cur.fetchone()
-            
-            if not post:
+            cur.execute("SELECT 1 FROM posts WHERE id = %s", (post_id,))
+            if not cur.fetchone():
                 raise HTTPException(
                     status_code=404,
                     detail=f"Post with id {post_id} not found"
                 )
-            
-            # Set liked status to false
-            was_liked = post["is_liked"]
+
+            cur.execute("DELETE FROM post_likes WHERE post_id = %s RETURNING post_id", (post_id,))
+            was_liked = cur.fetchone() is not None
+            conn.commit()
             if was_liked:
-                cur.execute(
-                    "UPDATE posts SET is_liked = FALSE WHERE id = %s",
-                    (post_id,)
-                )
-                conn.commit()
                 trigger_profile_update(post_id)
 
             return ToggleLikeResponse(

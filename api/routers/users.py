@@ -46,8 +46,7 @@ def get_current_user_preferences():
                     END as type_name
                 FROM tags t
                 JOIN post_tags pt ON t.id = pt.tag_id
-                JOIN posts p ON pt.post_id = p.id
-                WHERE p.is_liked = TRUE
+                JOIN post_likes l ON l.post_id = pt.post_id
                 GROUP BY t.id, t.name, t.type, t.count
                 HAVING COUNT(pt.post_id) >= 2  -- Only include tags appearing at least twice
                 ORDER BY t.type, COUNT(pt.post_id) DESC
@@ -82,7 +81,7 @@ def get_current_user_preferences():
                 total_stats['types'][type_name]['total_occurrences'] += pref['liked_count']
             
             # Get total liked posts count
-            cur.execute("SELECT COUNT(*) as count FROM posts WHERE is_liked = TRUE")
+            cur.execute("SELECT COUNT(*) as count FROM post_likes")
             total_stats['total_liked_posts'] = cur.fetchone()['count']
             
             return UserPreferencesResponse(
@@ -124,16 +123,16 @@ def get_current_user_liked_posts(
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get total count
-            cur.execute("SELECT COUNT(*) as count FROM posts WHERE is_liked = TRUE")
+            cur.execute("SELECT COUNT(*) as count FROM post_likes")
             result = cur.fetchone()
             total_count = result['count'] if result else 0
             
             # Get liked posts with raw_data
             cur.execute("""
-                SELECT id, raw_data
-                FROM posts 
-                WHERE is_liked = TRUE 
-                ORDER BY id DESC 
+                SELECT p.id, p.raw_data
+                FROM post_likes l
+                JOIN posts p ON p.id = l.post_id
+                ORDER BY p.id DESC
                 LIMIT %s OFFSET %s
             """, (limit, offset))
             

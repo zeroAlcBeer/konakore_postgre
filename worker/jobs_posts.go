@@ -226,7 +226,8 @@ func (w *Worker) syncPostsFromRemote(ctx context.Context, page, limit int64, log
 }
 
 // upsertPosts writes a batch of raw konachan post objects into the posts table
-// in a single transaction, marking each row for reprocessing.
+// in a single transaction. The posts trigger (migrations 006/008) queues a
+// post for tag reprocessing when its raw_data changes.
 func (w *Worker) upsertPosts(ctx context.Context, posts []map[string]any) error {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -248,11 +249,7 @@ func (w *Worker) upsertPosts(ctx context.Context, posts []map[string]any) error 
 			 VALUES ($1, $2::jsonb, NOW())
 			 ON CONFLICT (id) DO UPDATE SET
 				raw_data = EXCLUDED.raw_data,
-				last_synced_at = NOW(),
-				is_processed = CASE
-					WHEN posts.raw_data IS DISTINCT FROM EXCLUDED.raw_data THEN FALSE
-					ELSE posts.is_processed
-				END`,
+				last_synced_at = NOW()`,
 			id, string(raw)); err != nil {
 			return err
 		}
