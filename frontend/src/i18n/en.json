@@ -122,7 +122,7 @@
     "siteFamilies": "{{count}} sets site-wide",
     "setCover": "Set as character cover",
     "coverSet": "Now the cover of {{name}}",
-    "coverNeedsSingle": "This image shows several characters; a cover must show one",
+    "coverNeedsSingle": "This image shows several characters; set its cover from that character’s search",
     "coverFailed": "Could not set the cover, try again"
   }
 }

@@ -8,8 +8,11 @@ const FRAME = 'M7 8h18v16H7z M9 10v12h14V10z';
 const PEAK = 'M10 21l4-5 3 3.5 2-2.5 3 4z';
 const TOAST_MS = 2400;
 
-/** Registers the button and its toast on an open lightbox; onCoverSet(name) runs after a successful pick. */
-export function registerCoverButton(pswp, { onCoverSet }) {
+/**
+ * Registers the button and its toast on an open lightbox. getSearchTag()
+ * returns the gallery's current search tag; onCoverSet(name) runs after a pick.
+ */
+export function registerCoverButton(pswp, { getSearchTag, onCoverSet }) {
   const charactersByPost = new Map(); // postId -> Promise<string[]>
   const charactersOf = (postId) => {
     if (!charactersByPost.has(postId)) {
@@ -61,7 +64,7 @@ export function registerCoverButton(pswp, { onCoverSet }) {
         const postId = pswp.currSlide?.data?.postId;
         if (!postId) return;
         const characters = await charactersOf(postId);
-        if (pswp.currSlide?.data?.postId === postId && coverAction(characters).visible) button.style.display = '';
+        if (pswp.currSlide?.data?.postId === postId && coverAction(characters, getSearchTag()).visible) button.style.display = '';
       };
       pswp.on('change', refresh);
       refresh();
@@ -71,7 +74,7 @@ export function registerCoverButton(pswp, { onCoverSet }) {
       event.stopPropagation();
       const postId = pswp.currSlide?.data?.postId;
       if (!postId) return false;
-      const action = coverAction(await charactersOf(postId));
+      const action = coverAction(await charactersOf(postId), getSearchTag());
       if (action.error) {
         showToast(i18n.t('characters.coverNeedsSingle'), 'error');
         return false;

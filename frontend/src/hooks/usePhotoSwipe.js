@@ -28,6 +28,7 @@ function paintLikeButton(pswp, liked) {
  * @param {Function} options.handleTagClick - 点击 caption 中 tag 的回调
  * @param {Function} options.onToggleLike - (post) => void; flips post.liked
  * @param {Array}  options.posts - posts from the query cache (source of liked state)
+ * @param {string} options.searchTag - the gallery's search tag; picks a group shot's cover character
  */
 export function usePhotoSwipe({
   displayPosts,
@@ -36,6 +37,7 @@ export function usePhotoSwipe({
   handleTagClick,
   onToggleLike,
   posts,
+  searchTag,
 }) {
   const queryClientRef = useRef(useQueryClient());
   const lightboxRef = useRef(null);
@@ -47,6 +49,7 @@ export function usePhotoSwipe({
   const postsRef = useRef([]);
   const onToggleLikeRef = useRef(onToggleLike);
   const handleTagClickRef = useRef(handleTagClick);
+  const searchTagRef = useRef(searchTag);
 
   // Portal 状态：当前激活的 postId 和 caption 容器 DOM 节点
   const [activePostId, setActivePostId] = useState(null);
@@ -56,6 +59,7 @@ export function usePhotoSwipe({
   useEffect(() => { groupMapRef.current = groupMap || new Map(); }, [groupMap]);
   useEffect(() => { onToggleLikeRef.current = onToggleLike; }, [onToggleLike]);
   useEffect(() => { handleTagClickRef.current = handleTagClick; }, [handleTagClick]);
+  useEffect(() => { searchTagRef.current = searchTag; }, [searchTag]);
 
   // Repaint the open lightbox's heart whenever the cached posts change
   // (a like from any path lands in the cache, not in the DOM).
@@ -196,6 +200,7 @@ export function usePhotoSwipe({
 
       // Set-as-cover; a new pick shows on the character index and info bar.
       registerCoverButton(pswp, {
+        getSearchTag: () => searchTagRef.current,
         onCoverSet: (name) => {
           queryClientRef.current.invalidateQueries({ queryKey: ['characters'] });
           queryClientRef.current.invalidateQueries({ queryKey: ['character', name] });

@@ -20,9 +20,14 @@ export const LADDER_PAGE_SIZE = 40;
 /** Tile size from the rank within the page; every page opens with its own lead. */
 export const ladderTier = (indexOnPage) => (indexOnPage === 0 ? 'lead' : indexOnPage <= 4 ? 'major' : 'minor');
 
-/** What the lightbox's set-as-cover button does for a post with these characters. */
-export function coverAction(characters) {
+/**
+ * What the lightbox's set-as-cover button does for a post with these
+ * characters while the gallery searches `searchTag`: the searched character
+ * when the post shows it, else the post's only character.
+ */
+export function coverAction(characters, searchTag) {
   if (characters.length === 0) return { visible: false };
-  if (characters.length > 1) return { visible: true, error: 'multiple' };
-  return { visible: true, character: characters[0] };
+  if (characters.includes(searchTag)) return { visible: true, character: searchTag };
+  if (characters.length === 1) return { visible: true, character: characters[0] };
+  return { visible: true, error: 'multiple' };
 }

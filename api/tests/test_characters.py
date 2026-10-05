@@ -169,13 +169,23 @@ def test_set_cover_overrides_the_automatic_one_at_once(client, lib):
     assert cover_id(client, "alice") == later
 
 
-def test_set_cover_rejects_group_shots_and_foreign_posts(client, lib):
-    lib.post("alice")
+def test_set_cover_accepts_group_shots_for_the_named_character(client, lib):
+    alice_auto = lib.post("alice")
+    bob_auto = lib.post("bob")
     group = lib.post("alice", "bob")
+    lib.refresh()
+
+    assert set_cover(client, "alice", group).status_code == 204
+    assert cover_id(client, "alice") == group
+    assert cover_id(client, "bob") == bob_auto  # only the named character changes
+    assert alice_auto != group
+
+
+def test_set_cover_rejects_foreign_and_unknown(client, lib):
+    lib.post("alice")
     foreign = lib.post("bob")
     lib.refresh()
 
-    assert set_cover(client, "alice", group).status_code == 409
     assert set_cover(client, "alice", foreign).status_code == 400
     assert set_cover(client, "nobody", foreign).status_code == 404
     assert set_cover(client, "tagme_(character)", foreign).status_code == 404

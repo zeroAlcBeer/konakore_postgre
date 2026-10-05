@@ -98,7 +98,7 @@ class SetCoverRequest(BaseModel):
 # Custom method (AIP-136); :path keeps names containing "/" matchable.
 @router.post("/{name:path}:setCover", status_code=204)
 def set_cover(name: str, body: SetCoverRequest):
-    """Make a single-character post the character's cover (see Cover picks)."""
+    """Make a post carrying the character its cover (see Cover picks)."""
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT 1 FROM posts WHERE id = %s", (body.post_id,))
@@ -117,8 +117,6 @@ def set_cover(name: str, body: SetCoverRequest):
                 raise HTTPException(status_code=404, detail=f"Character {name!r} not found")
             if name not in on_post:
                 raise HTTPException(status_code=400, detail=f"Post {body.post_id} does not show {name!r}")
-            if len(on_post) > 1:
-                raise HTTPException(status_code=409, detail="A cover must show a single character")
             cur.execute("""
                 INSERT INTO character_covers (tag_id, post_id) VALUES (%s, %s)
                 ON CONFLICT (tag_id) DO UPDATE SET post_id = EXCLUDED.post_id, set_at = NOW()

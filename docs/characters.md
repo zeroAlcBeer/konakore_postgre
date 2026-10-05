@@ -58,17 +58,16 @@ both views took 7 s on the production Pi.
 
 ## Cover picks
 
-The owner can make any post that shows exactly one character, of any
-rating, that character's cover. Picks are user state, so they live in
+The owner can make any post that carries a character's tag, of any rating
+and whoever else is in it, that character's cover. Picks are user state, so they live in
 their own table, not in the views: `character_covers` (`tag_id` primary
 key, `post_id`, `set_at`; migration `012_character_covers.sql`). A new pick
 replaces the old one and takes effect at once, without waiting for a view
 refresh. Deleting the post deletes the pick, and the automatic cover
 returns.
 
-"One character" counts characters as defined above, so an excluded tag
-next to the character does not block a pick. Group shots cannot be picked
-because the same image would then speak for several characters.
+Which character a pick is for comes from where it is made, never from a
+picker (see the lightbox button under UI).
 
 ## API
 
@@ -107,7 +106,7 @@ also answers "is this tag a character".
 `POST /v1/characters/{name}:setCover` with `{"post_id": 123}` sets the
 pick and returns 204. 404 when the name is not a character or the post
 does not exist; 400 when the post does not carry the
-character's tag; 409 when the post shows more than one character.
+character's tag.
 
 `GET /v1/posts/{id}/characters` returns `{"characters": ["name", ...]}`: the
 characters on that post, by the definition above. 404 for an unknown post.
@@ -136,9 +135,11 @@ it. Clicking a tile opens `/?tag=<name>`.
 
 **Set as cover** (lightbox toolbar, `frontend/src/hooks/usePhotoSwipe.js`):
 shown when the current post has at least one character
-(`GET /v1/posts/{id}/characters`), hidden otherwise. With one character it
-sets the pick and confirms in the lightbox; with several it only shows an
-error that a cover needs a single-character image.
+(`GET /v1/posts/{id}/characters`), hidden otherwise. The pick is for the
+character the gallery is searching (`?tag=`) when the post shows it, else
+for the post's only character; it confirms in the lightbox. A post with
+several characters, opened outside a search for one of them, shows an error
+pointing to that character's search instead.
 
 **Character info bar** (`frontend/src/components/CharacterInfoBar.jsx`):
 under the gallery's search bar, in both the gallery and the favorites,

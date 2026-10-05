@@ -413,6 +413,7 @@ const PostsPage = ({ scope = 'all' }) => {
     handleTagClick,
     onToggleLike: handleToggleLike,
     posts,
+    searchTag: searchQuery,
   });
 
   // Caption post, looked up among all posts including grouped children

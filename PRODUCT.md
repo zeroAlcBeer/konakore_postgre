@@ -43,7 +43,7 @@ worth looking at, not to look one up (lookup is the gallery's tag search).
   frontend's `/konachan-proxy`; upstream `preview_url` is small,
   `sample_url` is large.
 - Posts carry ratings s / q / e. Automatic character covers are rated s;
-  the owner may pick any single-character post as a cover.
+  the owner may pick any post carrying the character as its cover.
 - Character data (family count, work, cover, co-occurring characters) is
   defined in docs/characters.md; the index lists characters with at least
   20 families (about 3,000).

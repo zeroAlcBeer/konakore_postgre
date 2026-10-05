@@ -122,7 +122,7 @@
     "siteFamilies": "全站 {{count}} 组",
     "setCover": "设为角色封面",
     "coverSet": "已设为「{{name}}」的封面",
-    "coverNeedsSingle": "这张图有多个角色，封面只能用单人图",
+    "coverNeedsSingle": "这张图有多个角色，请在该角色的搜索结果里设置封面",
     "coverFailed": "设置封面失败，请重试"
   }
 }

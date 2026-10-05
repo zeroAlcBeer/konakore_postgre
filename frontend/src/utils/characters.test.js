@@ -61,14 +61,21 @@ describe('ladderTier', () => {
 
 describe('coverAction', () => {
   it('hides the button for posts without characters', () => {
-    expect(coverAction([])).toEqual({ visible: false });
+    expect(coverAction([], 'hatsune_miku')).toEqual({ visible: false });
+    expect(coverAction([], '')).toEqual({ visible: false });
   });
 
-  it('sets the only character', () => {
-    expect(coverAction(['hatsune_miku'])).toEqual({ visible: true, character: 'hatsune_miku' });
+  it('picks the searched character when the post shows it, group shots included', () => {
+    expect(coverAction(['hatsune_miku', 'kagamine_rin'], 'kagamine_rin')).toEqual({ visible: true, character: 'kagamine_rin' });
   });
 
-  it('refuses group shots', () => {
-    expect(coverAction(['hatsune_miku', 'kagamine_rin'])).toEqual({ visible: true, error: 'multiple' });
+  it('falls back to the only character', () => {
+    expect(coverAction(['hatsune_miku'], '')).toEqual({ visible: true, character: 'hatsune_miku' });
+    expect(coverAction(['hatsune_miku'], 'long_hair')).toEqual({ visible: true, character: 'hatsune_miku' });
+  });
+
+  it('refuses group shots outside a search for one of them', () => {
+    expect(coverAction(['hatsune_miku', 'kagamine_rin'], '')).toEqual({ visible: true, error: 'multiple' });
+    expect(coverAction(['hatsune_miku', 'kagamine_rin'], 'long_hair')).toEqual({ visible: true, error: 'multiple' });
   });
 });
