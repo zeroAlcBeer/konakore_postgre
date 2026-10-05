@@ -156,7 +156,10 @@ returns it). A banner the width of the gallery shows the character's cover,
 cropped to fill behind a dark fade on its left, and over the fade the
 Chinese name (else the tag name) large, the tag name, the work (linking to
 `/characters?work=`) and the site-wide family count (labelled as
-site-wide, since the favorites grid shows fewer). Under the banner, with
+site-wide, since the favorites grid shows fewer). An icon button at the
+banner's top right opens the cover alone in the lightbox (a one-slide
+gallery: its `sample_url`, sized by `cover.width` / `cover.height`); it is
+absent when the character has no cover. Under the banner, with
 no heading, one scrollable row of buttons for the co-occurring characters:
 each a small round crop of their cover, their name and the shared family
 count; pressing one switches the search to them. Nothing shows for other

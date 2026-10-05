@@ -2,14 +2,21 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link as RouterLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Box, ButtonBase, Typography } from '@mui/material';
+import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
+import { OpenInFull as OpenCoverIcon } from '@mui/icons-material';
 
 import { getCharacter } from '../api';
 import { useTag } from '../contexts/TagContext';
-import { chineseName, coverUrl } from '../utils/characters';
+import { chineseName, coverSlide, coverUrl } from '../utils/characters';
 import { getImageUrl } from '../utils/imageUtils';
 
 const BANNER_INK = '#f1f1f5';
+
+// The cover alone in the lightbox: a one-slide gallery.
+async function openCover(slide) {
+  const { default: PhotoSwipe } = await import('photoswipe');
+  new PhotoSwipe({ dataSource: [slide], index: 0, bgOpacity: 0.9, showHideAnimationType: 'fade' }).init();
+}
 
 /** One co-occurring character: round cover crop, name, shared families. */
 function PeerButton({ peer, translations, onSelect }) {
@@ -50,6 +57,7 @@ export default function CharacterInfoBar({ tag, onSelect }) {
   if (!data) return null;
   const zh = chineseName(data.name, translations);
   const cover = coverUrl(data.cover);
+  const slide = coverSlide(data.cover);
 
   return (
     <Box sx={{ px: { xs: 1, sm: 2, md: 3 }, mb: 2 }}>
@@ -65,6 +73,19 @@ export default function CharacterInfoBar({ tag, onSelect }) {
           <Box component="img" src={cover} alt="" sx={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%', zIndex: -2,
           }} />
+        )}
+        {slide && (
+          <IconButton
+            onClick={() => openCover(slide)}
+            aria-label={t('characters.openCover')}
+            title={t('characters.openCover')}
+            sx={{
+              position: 'absolute', top: 12, right: 12, color: BANNER_INK,
+              bgcolor: 'rgba(10,10,12,.45)', '&:hover': { bgcolor: 'rgba(10,10,12,.7)' },
+            }}
+          >
+            <OpenCoverIcon fontSize="small" />
+          </IconButton>
         )}
         <Box sx={{ position: 'absolute', left: 'clamp(20px, 3vw, 36px)', bottom: 'clamp(18px, 2.4vw, 28px)', maxWidth: 'min(560px, 70%)' }}>
           <Typography component="h2" sx={{
