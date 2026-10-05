@@ -7,16 +7,10 @@ import { OpenInFull as OpenCoverIcon } from '@mui/icons-material';
 
 import { getCharacter } from '../api';
 import { useTag } from '../contexts/TagContext';
-import { chineseName, coverSlide, coverUrl } from '../utils/characters';
+import { chineseName, coverUrl } from '../utils/characters';
 import { getImageUrl } from '../utils/imageUtils';
 
 const BANNER_INK = '#f1f1f5';
-
-// The cover alone in the lightbox: a one-slide gallery.
-async function openCover(slide) {
-  const { default: PhotoSwipe } = await import('photoswipe');
-  new PhotoSwipe({ dataSource: [slide], index: 0, bgOpacity: 0.9, showHideAnimationType: 'fade' }).init();
-}
 
 /** One co-occurring character: round cover crop, name, shared families. */
 function PeerButton({ peer, translations, onSelect }) {
@@ -43,9 +37,10 @@ function PeerButton({ peer, translations, onSelect }) {
 /**
  * Banner under the gallery search bar when the searched tag is a character;
  * renders nothing otherwise (the lookup 404s) and while it loads.
+ * onOpenCover(postId) opens the cover post in the gallery's lightbox.
  * Contract: docs/characters.md, UI.
  */
-export default function CharacterInfoBar({ tag, onSelect }) {
+export default function CharacterInfoBar({ tag, onSelect, onOpenCover }) {
   const { t } = useTranslation();
   const { translations } = useTag();
   const { data } = useQuery({
@@ -57,7 +52,6 @@ export default function CharacterInfoBar({ tag, onSelect }) {
   if (!data) return null;
   const zh = chineseName(data.name, translations);
   const cover = coverUrl(data.cover);
-  const slide = coverSlide(data.cover);
 
   return (
     <Box sx={{ px: { xs: 1, sm: 2, md: 3 }, mb: 2 }}>
@@ -74,9 +68,9 @@ export default function CharacterInfoBar({ tag, onSelect }) {
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%', zIndex: -2,
           }} />
         )}
-        {slide && (
+        {data.cover && (
           <IconButton
-            onClick={() => openCover(slide)}
+            onClick={() => onOpenCover(data.cover.post_id)}
             aria-label={t('characters.openCover')}
             title={t('characters.openCover')}
             sx={{

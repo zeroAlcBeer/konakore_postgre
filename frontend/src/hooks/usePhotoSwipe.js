@@ -3,8 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import PhotoSwipeLightbox from 'photoswipe/lightbox';
 import 'photoswipe/style.css';
 import PhotoSwipeFullscreen from '../utils/photoswipe-fullscreen.esm';
-import { getImageUrl } from '../utils/imageUtils';
 import { registerCoverButton } from '../utils/pswpCoverButton';
+import { postSlide } from '../utils/lightbox';
 
 const HEART_PATH = 'M16 28.5l-1.8-1.6C7.4 20.8 3 16.8 3 12c0-3.9 3.1-7 7-7 2.2 0 4.3 1 5.6 2.7L16 8l.4-.3C17.7 6 19.8 5 22 5c3.9 0 7 3.1 7 7 0 4.8-4.4 8.8-11.2 14.9L16 28.5z';
 
@@ -46,6 +46,7 @@ export function usePhotoSwipe({
   // Flattened dataSource = each parent followed by its grouped children,
   // so the whole page (children included) forms ONE PhotoSwipe gallery.
   const postIdToIndexRef = useRef(null);
+  const gridDataSourceRef = useRef([]);   // the grid's gallery, restored after openPosts
   const postsRef = useRef([]);
   const onToggleLikeRef = useRef(onToggleLike);
   const handleTagClickRef = useRef(handleTagClick);
@@ -333,6 +334,9 @@ export function usePhotoSwipe({
       });
     });
 
+    // openPosts swaps in its own slides; the grid's gallery comes back once that lightbox is gone.
+    lightbox.on('destroy', () => { lightbox.options.dataSource = gridDataSourceRef.current; });
+
     lightbox.init();
     lightboxRef.current = lightbox;
     window.currentLightbox = lightbox;
@@ -365,14 +369,7 @@ export function usePhotoSwipe({
 
     const pushPost = (post) => {
       indexMap.set(post.id, dataSource.length);
-      dataSource.push({
-        src: getImageUrl(post.data?.sample_url || post.data?.jpeg_url || post.data?.file_url),
-        msrc: getImageUrl(post.data?.preview_url),
-        w: post.data.width,
-        h: post.data.height,
-        alt: post.data.tags,
-        postId: post.id,
-      });
+      dataSource.push(postSlide(post));
     };
 
     displayPosts.forEach(post => {
@@ -384,7 +381,8 @@ export function usePhotoSwipe({
       }
     });
 
-    lightboxRef.current.options.dataSource = dataSource;
+    gridDataSourceRef.current = dataSource;
+    if (!lightboxRef.current.pswp) lightboxRef.current.options.dataSource = dataSource;
     postIdToIndexRef.current = indexMap;
   }, [displayPosts, groupMap]);
 
@@ -402,6 +400,15 @@ export function usePhotoSwipe({
     lightbox.loadAndOpen(targetIndex != null ? targetIndex : index);
   }, [displayPosts]);
 
+  // Open the lightbox on just these posts (e.g. a character's cover), with every
+  // lightbox tool; the posts must also be in `posts` so caption and like find them.
+  const openPosts = useCallback((list) => {
+    const lightbox = window.currentLightbox;
+    if (!lightbox || !list.length) return;
+    lightbox.options.dataSource = list.map(postSlide);
+    lightbox.loadAndOpen(0);
+  }, []);
+
   // 关闭 PhotoSwipe 并触发 tag 搜索
   const closeLightboxAndSearch = useCallback((tag) => {
     const lightbox = window.currentLightbox;
@@ -413,6 +420,7 @@ export function usePhotoSwipe({
 
   return {
     onImageClick,
+    openPosts,
     activePostId,
     captionContainerRef,
     closeLightboxAndSearch,

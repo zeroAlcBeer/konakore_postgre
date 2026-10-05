@@ -28,18 +28,3 @@ export function coverAction(characters, searchTag) {
   if (characters.length === 1) return { visible: true, character: characters[0] };
   return { visible: true, error: 'multiple' };
 }
-
-const FALLBACK_SIZE = { width: 1500, height: 1000 };
-
-/** The cover as a one-slide lightbox gallery; null without an image. */
-export function coverSlide(cover) {
-  const full = cover?.sample_url || cover?.preview_url;
-  if (!full) return null;
-  const hasSize = cover.width && cover.height;
-  return {
-    src: getImageUrl(full),
-    msrc: getImageUrl(cover.preview_url || full),
-    width: hasSize ? cover.width : FALLBACK_SIZE.width,
-    height: hasSize ? cover.height : FALLBACK_SIZE.height,
-  };
-}

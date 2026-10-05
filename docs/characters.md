@@ -157,9 +157,11 @@ cropped to fill behind a dark fade on its left, and over the fade the
 Chinese name (else the tag name) large, the tag name, the work (linking to
 `/characters?work=`) and the site-wide family count (labelled as
 site-wide, since the favorites grid shows fewer). An icon button at the
-banner's top right opens the cover alone in the lightbox (a one-slide
-gallery: its `sample_url`, sized by `cover.width` / `cover.height`); it is
-absent when the character has no cover. Under the banner, with
+banner's top right opens the cover post (`cover.post_id`) in the gallery's
+own lightbox as a one-slide gallery, with everything the lightbox has for
+any post: the caption with its tags and info, like, set as cover,
+slideshow, fullscreen and zoom. The grid's gallery comes back when it
+closes. The button is absent when the character has no cover. Under the banner, with
 no heading, one scrollable row of buttons for the co-occurring characters:
 each a small round crop of their cover, their name and the shared family
 count; pressing one switches the search to them. Nothing shows for other

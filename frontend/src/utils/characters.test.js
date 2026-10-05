@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  chineseName, coverAction, coverSlide, coverUrl, gallerySearchPath, listRequest,
+  chineseName, coverAction, coverUrl, gallerySearchPath, listRequest,
 } from './characters';
 
 describe('gallerySearchPath', () => {
@@ -65,22 +65,5 @@ describe('coverAction', () => {
   it('refuses group shots outside a search for one of them', () => {
     expect(coverAction(['hatsune_miku', 'kagamine_rin'], '')).toEqual({ visible: true, error: 'multiple' });
     expect(coverAction(['hatsune_miku', 'kagamine_rin'], 'long_hair')).toEqual({ visible: true, error: 'multiple' });
-  });
-});
-
-describe('coverSlide', () => {
-  it('is the cover as one lightbox slide, at its own size', () => {
-    expect(coverSlide({ sample_url: 'https://konachan.net/s.jpg', preview_url: 'https://konachan.net/p.jpg', width: 1920, height: 1080 }))
-      .toEqual({ src: '/konachan-proxy/s.jpg', msrc: '/konachan-proxy/p.jpg', width: 1920, height: 1080 });
-  });
-
-  it('falls back to the preview and a 3:2 size', () => {
-    expect(coverSlide({ sample_url: null, preview_url: 'https://konachan.net/p.jpg', width: null, height: null }))
-      .toEqual({ src: '/konachan-proxy/p.jpg', msrc: '/konachan-proxy/p.jpg', width: 1500, height: 1000 });
-  });
-
-  it('is null without a cover', () => {
-    expect(coverSlide(null)).toBeNull();
-    expect(coverSlide({ sample_url: null, preview_url: null })).toBeNull();
   });
 });

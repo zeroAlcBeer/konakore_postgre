@@ -1,6 +1,6 @@
 import React, { useState, useReducer, useMemo, useEffect, useCallback, useTransition, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 
 import SearchBar from '../components/SearchBar';
@@ -9,7 +9,7 @@ import AppLayout from '../components/AppLayout';
 import PaginationControls from '../components/PaginationControls';
 import SimplePagination from '../components/SimplePagination';
 import LazyImageCard from '../components/LazyImageCard';
-import { getPosts, searchTags, getSandboxPosts } from '../api';
+import { getPosts, searchTags, getSandboxPosts, getPost } from '../api';
 import { useTag } from '../contexts/TagContext';
 import { tagManager } from '../utils/TagManager';
 import { Box, CircularProgress, Typography, Snackbar, Alert, Button } from '@mui/material';
@@ -335,6 +335,18 @@ const PostsPage = ({ scope = 'all' }) => {
     return () => clearTimeout(timeoutId);
   }, [shouldFetchTagInfo, currentPage, perPage, fetchTagInfo]);
 
+  // A post opened outside the grid (a character's cover). Cached under POST_LIST_KEY
+  // in list shape so likes reach it like any list.
+  const queryClient = useQueryClient();
+  const [coverPostId, setCoverPostId] = useState(null);
+  const { data: coverData } = useQuery({
+    queryKey: [POST_LIST_KEY, 'cover', coverPostId],
+    queryFn: () => getPost(coverPostId).then((post) => ({ posts: [post] })),
+    enabled: coverPostId != null,
+    staleTime: 5 * 60 * 1000,
+  });
+  const coverPost = coverData?.posts[0] || null;
+
   const {
     posts, postsForGrid, displayPosts, groupMap,
     excludedCountOnPage, relevanceRemovedCount, postScoresMap,
@@ -407,20 +419,31 @@ const PostsPage = ({ scope = 'all' }) => {
   }, [currentPageTags, mergeTagsWithCache]);
 
   // --- PHOTOSWIPE ---
-  const { onImageClick, activePostId, captionContainerRef, closeLightboxAndSearch } = usePhotoSwipe({
+  const lightboxPosts = useMemo(() => (coverPost ? [...posts, coverPost] : posts), [posts, coverPost]);
+  const { onImageClick, openPosts, activePostId, captionContainerRef, closeLightboxAndSearch } = usePhotoSwipe({
     displayPosts,
     groupMap,
     handleTagClick,
     onToggleLike: handleToggleLike,
-    posts,
+    posts: lightboxPosts,
     searchTag: searchQuery,
   });
 
-  // Caption post, looked up among all posts including grouped children
+  const handleOpenCover = useCallback(async (postId) => {
+    const data = await queryClient.fetchQuery({
+      queryKey: [POST_LIST_KEY, 'cover', postId],
+      queryFn: () => getPost(postId).then((post) => ({ posts: [post] })),
+      staleTime: 5 * 60 * 1000,
+    });
+    setCoverPostId(postId);
+    openPosts(data.posts);
+  }, [queryClient, openPosts]);
+
+  // Caption post, looked up among all posts including grouped children and the cover
   const activePost = useMemo(() => {
     if (!activePostId) return null;
-    return postsForGrid.find(p => p.id === activePostId) || null;
-  }, [activePostId, postsForGrid]);
+    return postsForGrid.find(p => p.id === activePostId) || (coverPost?.id === activePostId ? coverPost : null);
+  }, [activePostId, postsForGrid, coverPost]);
 
   // --- RENDER ---
 
@@ -450,7 +473,7 @@ const PostsPage = ({ scope = 'all' }) => {
         totalPosts={totalPosts}
         availableTags={availableTags}
       />
-      {searchQuery && <CharacterInfoBar tag={searchQuery} onSelect={handleSearch} />}
+      {searchQuery && <CharacterInfoBar tag={searchQuery} onSelect={handleSearch} onOpenCover={handleOpenCover} />}
 
       <Box sx={{
         mx: 'auto',
