@@ -4,13 +4,10 @@ const apiClient = axios.create({
   baseURL: '/api',
 });
 
-export const getPosts = async (page = 1, limit = 100, liked = null, likedArtists = null) => {
+export const getPosts = async (page = 1, limit = 100, liked = null) => {
   const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
   if (liked !== null) {
     params.append('liked', liked.toString());
-  }
-  if (likedArtists !== null) {
-    params.append('liked_artists', likedArtists.toString());
   }
   const response = await apiClient.get(`/v1/posts?${params}`);
   return response.data;

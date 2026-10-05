@@ -26,106 +26,21 @@ logger = logging.getLogger(__name__)
 def list_posts(
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     limit: int = Query(default=100, ge=1, le=500, description="Number of posts per page"),
-    liked: Optional[bool] = Query(default=None, description="Filter by liked status"),
-    liked_artists: Optional[bool] = Query(default=None, description="Filter by posts tagged with artists from liked posts (cannot be used with 'liked' parameter)")
+    liked: Optional[bool] = Query(default=None, description="true: only liked posts"),
 ):
     """
     List posts with pagination.
 
-    The unfiltered and liked lists page by family (see families.py): `limit`
-    and the totals count families, and each page carries every matching
-    member of its families.
-
-    Supports filtering by liked status or by artists from liked posts.
-    
-    - liked: Filter posts by like status
-    - liked_artists: Filter posts tagged with artists (type=1) from liked posts
-    
-    Note: 'liked' and 'liked_artists' cannot be used simultaneously.
+    Pages by family (see families.py): `limit` and the totals count
+    families, and each page carries every matching member of its families.
     """
-    # Validate that liked and liked_artists are not both set
-    if liked is not None and liked_artists is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Parameters 'liked' and 'liked_artists' cannot be used together"
-        )
-    
-    # Limit enforcement
-    limit = min(limit, 500)
     offset = (page - 1) * limit
-    
-    # Convert liked parameter
-    liked_filter = None
-    if liked is not None:
-        liked_filter = bool(liked)
-    
-    # Convert liked_artists parameter
-    liked_artists_filter = None
-    if liked_artists is not None:
-        liked_artists_filter = bool(liked_artists)
-    
+
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Build query based on filters
-            if liked_artists_filter is True:
-                # Get total count for liked_artists filter
-                # Subquery: Find all artist tags (type=1) from liked posts
-                # Exclude tagme_(artist) - anonymous artist tag
-                # Then find all posts that have any of these artist tags
-                cur.execute("""
-                    SELECT COUNT(DISTINCT p.id) 
-                    FROM posts p
-                    WHERE EXISTS (
-                        SELECT 1 
-                        FROM post_tags pt
-                        INNER JOIN tags t ON pt.tag_id = t.id
-                        WHERE pt.post_id = p.id
-                        AND t.type = 1
-                        AND t.name != 'tagme_(artist)'
-                        AND t.id IN (
-                            SELECT DISTINCT pt2.tag_id
-                            FROM post_tags pt2
-                            INNER JOIN post_likes l2 ON l2.post_id = pt2.post_id
-                            INNER JOIN tags t2 ON pt2.tag_id = t2.id
-                            WHERE t2.type = 1
-                            AND t2.name != 'tagme_(artist)'
-                        )
-                    )
-                """)
-                total_count = cur.fetchone()['count']
-                
-                # Get paginated data for liked_artists filter
-                cur.execute(f"""
-                    SELECT DISTINCT {post_columns()}
-                    FROM posts p
-                    LEFT JOIN post_derived d ON d.post_id = p.id
-                    LEFT JOIN user_profile up ON up.id = 1
-                    WHERE EXISTS (
-                        SELECT 1
-                        FROM post_tags pt
-                        INNER JOIN tags t ON pt.tag_id = t.id
-                        WHERE pt.post_id = p.id
-                        AND t.type = 1
-                        AND t.name != 'tagme_(artist)'
-                        AND t.id IN (
-                            SELECT DISTINCT pt2.tag_id
-                            FROM post_tags pt2
-                            INNER JOIN post_likes l2 ON l2.post_id = pt2.post_id
-                            INNER JOIN tags t2 ON pt2.tag_id = t2.id
-                            WHERE t2.type = 1
-                            AND t2.name != 'tagme_(artist)'
-                        )
-                    )
-                    ORDER BY p.id DESC
-                    LIMIT %s OFFSET %s
-                """, (limit, offset))
-                # Paged by post, not by family; unused by the frontend.
-                db_posts = cur.fetchall()
-
-            elif liked_filter is True:
+            if liked:
                 total_count = count_filtered_families(cur, LIKED_MATCH, ())
                 db_posts = fetch_filtered_families_page(cur, LIKED_MATCH, (), limit, offset)
-
             else:
                 # No filter - page over precomputed family heads.
                 total_count = estimate_all_families_count(cur)
