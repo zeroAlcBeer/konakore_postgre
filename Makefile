@@ -34,7 +34,7 @@ LOCAL_FRONTEND_IMAGE := $(PROJECT_NAME)_$(FRONTEND_SERVICE_NAME)
 
 
 # --- Local Development ---
-.PHONY: build up down restart logs logs-api logs-worker logs-frontend build-frontend local uv-lock doctor
+.PHONY: build up down restart logs logs-api logs-worker logs-frontend build-frontend local uv-lock doctor test-worker
 
 # Generate uv.lock file for the Python API service (run this before building)
 uv-lock:
@@ -100,6 +100,15 @@ doctor:
 	@echo "--> Running react-doctor on frontend/..."
 	cd frontend && npx react-doctor .
 
+# Worker tests against a throwaway pgvector Postgres (DB tests skip without it)
+TEST_PG_PORT ?= 55432
+test-worker:
+	@docker rm -f konakore-test-pg >/dev/null 2>&1 || true
+	docker run -d --rm --name konakore-test-pg -e POSTGRES_PASSWORD=test -p $(TEST_PG_PORT):5432 pgvector/pgvector:pg14 >/dev/null
+	@until docker exec konakore-test-pg pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; do sleep 1; done
+	cd worker && TEST_DATABASE_URL='postgres://postgres:test@localhost:$(TEST_PG_PORT)/postgres?sslmode=disable' go test -count=1 ./...; \
+		status=$$?; docker rm -f konakore-test-pg >/dev/null; exit $$status
+
 
 # --- Deployment ---
 .PHONY: release-component release-api release-worker release-frontend release-all
@@ -162,6 +171,7 @@ help:
 	@echo "  logs-worker    Tail logs from the worker service"
 	@echo "  logs-frontend  Tail logs from the frontend service"
 	@echo "  doctor         Run react-doctor to check React codebase health"
+	@echo "  test-worker    Run worker tests against a throwaway pgvector Postgres"
 	@echo ""
 	@echo "Deployment:"
 	@echo "  release-api      Build + push the api image (:latest and :git-sha)"

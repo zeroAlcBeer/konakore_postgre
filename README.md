@@ -28,9 +28,9 @@ make help    # everything else
 
 ## Deployment
 
-Production runs as a Dockge stack on a Raspberry Pi, deployed by GitHub
-Actions (`.github/workflows/deploy.yml`): pushes to master build changed
-components natively on a self-hosted runner, publish immutable git-SHA
-image tags to a private Zot registry, pin them in the stack's `.env`
-(see `.env.example`), and roll `docker-compose.deployment.yaml`.
-Manual releases: `make release-{api,worker,frontend}`.
+Production runs as a Dockge stack on a Raspberry Pi
+(`docker-compose.deployment.yaml`). Deploys are manual from a workstation:
+`make release-{api,worker,frontend}` publishes an immutable git-SHA image
+tag to the private Zot registry; pin that tag in the stack's `.env` (see
+`.env.example`), then pull and recreate only that service. CI
+(`.github/workflows/ci.yml`) only checks builds and tests.

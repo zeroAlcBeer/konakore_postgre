@@ -13,6 +13,14 @@ on:
 jobs:
   worker:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg14
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -22,6 +30,10 @@ jobs:
         working-directory: worker
       - run: go vet ./...
         working-directory: worker
+      - run: go test -count=1 ./...
+        working-directory: worker
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/postgres?sslmode=disable
 
   api:
     runs-on: ubuntu-latest
