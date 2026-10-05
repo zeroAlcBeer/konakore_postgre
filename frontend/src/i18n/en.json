@@ -2,6 +2,7 @@
   "nav": {
     "gallery": "Gallery",
     "favorites": "Favorites",
+    "characters": "Characters",
     "stats": "Stats",
     "tasks": "Tasks"
   },
@@ -111,5 +112,15 @@
     "loadError": "Failed to load",
     "noResults": "No results found",
     "noFavorites": "No favorites yet"
+  },
+  "characters": {
+    "searchPlaceholder": "Search characters (tag name, or Chinese within this page)",
+    "work": "Work",
+    "clearWork": "All works",
+    "families": "{{count}} sets",
+    "total": "{{count}} characters",
+    "cjkHint": "Chinese search only filters the characters on this page",
+    "empty": "No characters found",
+    "cooccurring": "Often appears with"
   }
 }

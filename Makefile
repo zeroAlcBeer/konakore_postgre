@@ -34,7 +34,7 @@ LOCAL_FRONTEND_IMAGE := $(PROJECT_NAME)_$(FRONTEND_SERVICE_NAME)
 
 
 # --- Local Development ---
-.PHONY: build up down restart logs logs-api logs-worker logs-frontend build-frontend local uv-lock doctor test-worker test-api
+.PHONY: build up down restart logs logs-api logs-worker logs-frontend build-frontend local uv-lock doctor test-worker test-api test-frontend
 
 # Generate uv.lock file for the Python API service (run this before building)
 uv-lock:
@@ -107,6 +107,9 @@ test-worker:
 test-api:
 	scripts/with-test-pg.sh sh -c 'cd api && uv run --group dev pytest -q'
 
+test-frontend:
+	cd frontend && npm test
+
 
 # --- Deployment ---
 .PHONY: release-component release-api release-worker release-frontend release-all
@@ -171,6 +174,7 @@ help:
 	@echo "  doctor         Run react-doctor to check React codebase health"
 	@echo "  test-worker    Run worker tests against a throwaway pgvector Postgres"
 	@echo "  test-api       Run api tests against a throwaway pgvector Postgres"
+	@echo "  test-frontend  Run frontend unit tests (vitest)"
 	@echo ""
 	@echo "Deployment:"
 	@echo "  release-api      Build + push the api image (:latest and :git-sha)"

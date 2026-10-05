@@ -19,5 +19,6 @@ Every request queries these directly; the api keeps no cache.
 
 The worker task `matviews` (`worker/jobs_matviews.go`) runs
 `REFRESH MATERIALIZED VIEW CONCURRENTLY` on every view in its list every
-10 minutes. Post counts therefore lag syncs by at most 10 minutes; like
+10 minutes (the character page's views share it, see
+[characters.md](characters.md)). Post counts therefore lag syncs by at most 10 minutes; like
 counts are always current.

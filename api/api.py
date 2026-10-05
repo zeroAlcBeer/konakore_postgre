@@ -15,7 +15,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 
 # Import routers
-from routers import posts, tags, users, stats, tasks
+from routers import posts, tags, users, stats, tasks, characters
 
 load_dotenv()
 
@@ -74,6 +74,7 @@ app.include_router(tags.router)
 app.include_router(users.router)
 app.include_router(stats.router)
 app.include_router(tasks.router)
+app.include_router(characters.router)
 
 
 @app.get("/")

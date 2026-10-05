@@ -21,6 +21,7 @@ import { usePhotoSwipe } from '../hooks/usePhotoSwipe';
 import { usePostsProcessing } from '../hooks/usePostsProcessing';
 import { useToggleLike, POST_LIST_KEY } from '../hooks/useToggleLike';
 import CaptionContent from '../components/CaptionContent';
+import CharacterHeader from '../components/CharacterHeader';
 import { useTranslation } from 'react-i18next';
 
 // What differs between the main feed and the favorites view.
@@ -109,8 +110,8 @@ function PostsPageContent({
 }
 
 // UI state grouped so one logical update is one render.
-const uiStateInit = () => ({
-  searchQuery: '',
+const uiStateInit = (initialQuery) => ({
+  searchQuery: initialQuery || '',
   currentPage: 1,
   perPage: 100,
   sortOption: 'id',
@@ -264,13 +265,14 @@ function usePostsPageData({ scope, searchQuery, currentPage, perPage, sortOption
 /**
  * Post grid page shared by the main feed (scope="all") and favorites
  * (scope="liked"). Mount with a distinct `key` per scope so UI state resets
- * when switching routes.
+ * when switching routes. With `character` it is the character page: it opens
+ * on a search for that tag, under the character's header.
  */
-const PostsPage = ({ scope = 'all' }) => {
+const PostsPage = ({ scope = 'all', character = null }) => {
   const { withFilters, fetchTagInfo: shouldFetchTagInfo, emptyKey } = SCOPES[scope];
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [ui, dispatch] = useReducer(uiStateReducer, undefined, uiStateInit);
+  const [ui, dispatch] = useReducer(uiStateReducer, character, uiStateInit);
 
   // Excluded tags and relevance threshold, restored from tagManager
   const [excludedTags, setExcludedTags] = useState(() => {
@@ -432,6 +434,7 @@ const PostsPage = ({ scope = 'all' }) => {
         handleColumnWidthChange={handleColumnWidthChange}
         dispatch={dispatch}
       />
+      {character && searchQuery === character && <CharacterHeader name={character} />}
       <SearchBar
         onSearch={handleSearch}
         searchQuery={searchQuery}
