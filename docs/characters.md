@@ -80,8 +80,8 @@ name. Parameters:
 - `work`: exact copyright tag name; only characters whose work it is.
 - `page` (from 1), `limit` (1-100, default 24).
 
-Without `work` the list holds only characters with at least 20 families
-(3,065 at design time); finding any other character is the gallery's tag
+Without `work` the list holds only characters with at least 300 families
+(131 when this was set, 2026-10); finding any other character is the gallery's tag
 search. With `work` it holds all of that work's characters.
 Response: `characters` plus the usual `pagination`. Each item:
 

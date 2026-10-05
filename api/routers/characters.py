@@ -20,7 +20,7 @@ from utils import get_db_connection
 router = APIRouter(prefix="/v1/characters", tags=["characters"])
 
 # The unfiltered list hides characters below this many families.
-MIN_LISTED_FAMILIES = 20
+MIN_LISTED_FAMILIES = 300
 
 SUMMARY_SQL = """
     SELECT t.id, t.name, s.family_count, w.name AS work,

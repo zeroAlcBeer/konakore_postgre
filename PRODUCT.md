@@ -44,9 +44,8 @@ worth looking at, not to look one up (lookup is the gallery's tag search).
   `sample_url` is large.
 - Posts carry ratings s / q / e. Automatic character covers are rated s;
   the owner may pick any post carrying the character as its cover.
-- Character data (family count, work, cover, co-occurring characters) is
-  defined in docs/characters.md; the index lists characters with at least
-  20 families (about 3,000).
+- Character data (family count, work, cover, co-occurring characters) and
+  which characters the index lists are defined in docs/characters.md.
 - Chinese names come from a third-party translation table loaded in the
   frontend; many characters have none and show their tag name.
 - UI languages: Chinese (primary) and English.

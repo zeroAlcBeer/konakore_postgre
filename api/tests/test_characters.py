@@ -67,8 +67,8 @@ def names(response):
     return [c["name"] for c in response.json()["characters"]]
 
 
-def test_long_tail_threshold_is_20_families():
-    assert MIN == 20  # docs/characters.md, API
+def test_long_tail_threshold_is_300_families():
+    assert MIN == 300  # docs/characters.md, API
 
 
 def test_list_orders_by_families_then_name_and_hides_the_long_tail(client, lib):
