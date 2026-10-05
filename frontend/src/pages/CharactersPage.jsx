@@ -56,19 +56,20 @@ export default function CharactersPage() {
   const urlQuery = searchParams.get('q') || '';
   const [input, setInput] = useState(urlQuery);
 
-  const update = (changes) => setSearchParams((prev) => {
+  const update = (changes, options) => setSearchParams((prev) => {
     const next = new URLSearchParams(prev);
     Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)));
     return next;
-  });
+  }, options);
 
-  // The URL owns the query: follow it on back/forward, push typing into it
-  // after a pause. A new query starts at page 1.
+  // The URL owns the query: follow it on back/forward, write typing into it
+  // after a pause (replacing the entry, so Back skips half-typed queries).
+  // A new query starts at page 1.
   useEffect(() => { setInput(urlQuery); }, [urlQuery]);
   useEffect(() => {
     if (input === urlQuery) return undefined;
     // Stored untrimmed so the sync above never rewrites what is being typed.
-    const id = setTimeout(() => update({ q: input, page: null }), SEARCH_DEBOUNCE_MS);
+    const id = setTimeout(() => update({ q: input, page: null }, { replace: true }), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [input]); // eslint-disable-line react-hooks/exhaustive-deps -- runs on typing only
 
