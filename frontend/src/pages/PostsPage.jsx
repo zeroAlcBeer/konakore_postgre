@@ -21,7 +21,7 @@ import { usePhotoSwipe } from '../hooks/usePhotoSwipe';
 import { usePostsProcessing } from '../hooks/usePostsProcessing';
 import { useToggleLike, POST_LIST_KEY } from '../hooks/useToggleLike';
 import CaptionContent from '../components/CaptionContent';
-import CharacterHeader from '../components/CharacterHeader';
+import CharacterInfoBar from '../components/CharacterInfoBar';
 import { useTranslation } from 'react-i18next';
 
 // What differs between the main feed and the favorites view.
@@ -109,10 +109,11 @@ function PostsPageContent({
   );
 }
 
-// UI state grouped so one logical update is one render.
-const uiStateInit = (initialQuery) => ({
-  searchQuery: initialQuery || '',
+// UI state grouped so one logical update is one render. The search tag lives
+// in the URL (?tag=); the page belongs to the query it was set for.
+const uiStateInit = () => ({
   currentPage: 1,
+  pageQuery: '',
   perPage: 100,
   sortOption: 'id',
   excludedTagsOpen: false,
@@ -124,12 +125,8 @@ const uiStateInit = (initialQuery) => ({
 
 function uiStateReducer(state, action) {
   switch (action.type) {
-    case 'SEARCH':
-      return { ...state, searchQuery: action.query, currentPage: 1, sortOption: 'id' };
-    case 'CLEAR_SEARCH':
-      return { ...state, searchQuery: '', currentPage: 1 };
     case 'SET_PAGE':
-      return { ...state, currentPage: action.page };
+      return { ...state, currentPage: action.page, pageQuery: action.query };
     case 'SET_PER_PAGE':
       return { ...state, perPage: action.perPage, currentPage: 1 };
     case 'SET_SORT':
@@ -265,14 +262,13 @@ function usePostsPageData({ scope, searchQuery, currentPage, perPage, sortOption
 /**
  * Post grid page shared by the main feed (scope="all") and favorites
  * (scope="liked"). Mount with a distinct `key` per scope so UI state resets
- * when switching routes. With `character` it is the character page: it opens
- * on a search for that tag, under the character's header.
+ * when switching routes.
  */
-const PostsPage = ({ scope = 'all', character = null }) => {
+const PostsPage = ({ scope = 'all' }) => {
   const { withFilters, fetchTagInfo: shouldFetchTagInfo, emptyKey } = SCOPES[scope];
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [ui, dispatch] = useReducer(uiStateReducer, character, uiStateInit);
+  const [ui, dispatch] = useReducer(uiStateReducer, undefined, uiStateInit);
 
   // Excluded tags and relevance threshold, restored from tagManager
   const [excludedTags, setExcludedTags] = useState(() => {
@@ -306,7 +302,9 @@ const PostsPage = ({ scope = 'all', character = null }) => {
     getTagTranslation,
   } = useTag();
 
-  const { searchQuery, currentPage, perPage, sortOption, excludedTagsOpen, relevanceFilterOpen, imageSizeOpen, columnWidth, snackbar } = ui;
+  const { perPage, sortOption, excludedTagsOpen, relevanceFilterOpen, imageSizeOpen, columnWidth, snackbar } = ui;
+  const searchQuery = searchParams.get('tag') || '';
+  const currentPage = ui.pageQuery === searchQuery ? ui.currentPage : 1;
 
   // Sandbox mode: derived from URL params
   const sandboxMin = searchParams.has('id_min') ? parseInt(searchParams.get('id_min'), 10) : null;
@@ -314,7 +312,12 @@ const PostsPage = ({ scope = 'all', character = null }) => {
   const isSandbox = sandboxMin !== null && sandboxMax !== null && !isNaN(sandboxMin) && !isNaN(sandboxMax);
 
   const handleClearSandbox = useCallback(() => {
-    setSearchParams({}, { replace: true });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('id_min');
+      next.delete('id_max');
+      return next;
+    }, { replace: true });
     dispatch({ type: 'CLEAR_SANDBOX' });
   }, [setSearchParams]);
 
@@ -344,15 +347,20 @@ const PostsPage = ({ scope = 'all', character = null }) => {
   });
 
   // --- EVENT HANDLERS ---
-  const handleSearch = (query) => dispatch({ type: 'SEARCH', query });
-  const clearSearch = () => dispatch({ type: 'CLEAR_SEARCH' });
-
-  const handleTagClick = useCallback((tag) => {
-    dispatch({ type: 'SEARCH', query: tag });
-  }, []);
+  // A new search starts at page 1 (see currentPage) and the default sort.
+  const handleSearch = useCallback((query) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (query) next.set('tag', query); else next.delete('tag');
+      return next;
+    });
+    dispatch({ type: 'SET_SORT', sortOption: 'id' });
+  }, [setSearchParams]);
+  const clearSearch = () => handleSearch('');
+  const handleTagClick = handleSearch;
 
   const handlePageChange = (page) => {
-    dispatch({ type: 'SET_PAGE', page });
+    dispatch({ type: 'SET_PAGE', page, query: searchQuery });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -434,7 +442,6 @@ const PostsPage = ({ scope = 'all', character = null }) => {
         handleColumnWidthChange={handleColumnWidthChange}
         dispatch={dispatch}
       />
-      {character && searchQuery === character && <CharacterHeader name={character} />}
       <SearchBar
         onSearch={handleSearch}
         searchQuery={searchQuery}
@@ -442,6 +449,7 @@ const PostsPage = ({ scope = 'all', character = null }) => {
         totalPosts={totalPosts}
         availableTags={availableTags}
       />
+      {searchQuery && <CharacterInfoBar tag={searchQuery} onSelect={handleSearch} />}
 
       <Box sx={{
         mx: 'auto',

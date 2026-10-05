@@ -63,13 +63,12 @@ URL-encode it (names contain `(`, `)`, `:`).
 `GET /v1/characters` lists characters by `family_count` descending, then
 name. Parameters:
 
-- `q`: case-insensitive substring of the tag name; spaces match `_`. Searches
-  every character.
 - `work`: exact copyright tag name; only characters whose work it is.
 - `page` (from 1), `limit` (1-100, default 24).
 
-Without `q` or `work` the list holds only characters with at least 5
-families (10,781 at design time), so the long tail is reached by search.
+Without `work` the list holds only characters with at least 20 families
+(3,065 at design time); finding any other character is the gallery's tag
+search. With `work` it holds all of that work's characters.
 Response: `characters` plus the usual `pagination`. Each item:
 
 ```json
@@ -87,34 +86,32 @@ the frontend maps them as it does for posts.
 
 `GET /v1/characters/{name}` returns the same fields plus `cooccurring`:
 up to 10 `{"name", "family_count"}` items, most families first. 404 when
-the name is not a character with posts, including the excluded tags.
+the name is not a character with posts, including the excluded tags, so it
+also answers "is this tag a character".
 
-The character's posts are not part of this API: the page uses
-`POST /v1/tags:search` with the character's name, which pages by family.
-
-Chinese-name search happens in the frontend, which holds the translation
-table (see UI).
+The character's posts are not part of this API: the gallery's tag search
+(`POST /v1/tags:search`) shows them, paged by family.
 
 ## UI
 
-A **Characters** tab in the top bar (`frontend/src/pages/CharactersPage.jsx`,
-route `/characters`):
+A character's posts have one URL: the gallery's tag search, `/?tag=<name>`
+(`/favorites?tag=<name>` for likes). Every way to a character leads there:
+the character cards, the co-occurring chips, the search bar and the tags in
+the lightbox. The search tag lives in the URL, so back, reload and links
+keep it.
 
-- A search box and the result grid. The query, the work filter and the page
-  live in the URL (`?q=`, `?work=`, `?page=`), so back and reload keep them.
-- Latin input is sent as `q`. Input containing CJK characters is not sent:
-  the current page of the unfiltered list (or of the work) is filtered by
-  the Chinese translation instead, so it only finds characters on that page.
-- Each card: the cover (`sample_url`, else `preview_url`) cropped to 3:2,
-  the Chinese name when the translation table has one and the tag name, the
-  work (clicking it sets the work filter), and the family count.
+**Characters tab** (`frontend/src/pages/CharactersPage.jsx`, `/characters`):
+an index of cards, no search box. The work filter and the page live in the
+URL (`?work=`, `?page=`). Each card: the cover (`sample_url`, else
+`preview_url`) cropped to 3:2, the Chinese name when the translation table
+has one and the tag name, the work (clicking it sets the work filter), and
+the family count. Clicking the card opens `/?tag=<name>`.
 
-The character page (`/characters/<name>`, name URL-encoded) is the gallery
-(`PostsPage`) opened on a tag search for the character, with a header
-above it: cover, names, work, family count, and the co-occurring characters
-as chips linking to their pages. The header shows only while the grid still
-shows that character; searching another tag from the lightbox replaces it.
-
-Not built: a link from a character tag in the lightbox to its page. The
-frontend knows a tag's type only for tags it has fetched info for, so the
-link would be missing for most tags.
+**Character info bar** (`frontend/src/components/CharacterInfoBar.jsx`):
+under the gallery's search bar, in both the gallery and the favorites,
+whenever the searched tag is a character (`GET /v1/characters/{name}`
+returns it). It shows the Chinese and tag names, the work (linking to
+`/characters?work=`), the site-wide family count (labelled as site-wide,
+since the favorites grid shows fewer), and the co-occurring characters as
+chips that switch the search to them. Nothing shows for other tags, for no
+search, or while the lookup is in flight.

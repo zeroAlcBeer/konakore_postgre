@@ -114,13 +114,11 @@
     "noFavorites": "暂无收藏"
   },
   "characters": {
-    "searchPlaceholder": "搜索角色（标签名；中文只在本页内筛选）",
     "work": "作品",
-    "clearWork": "全部作品",
     "families": "{{count}} 组",
     "total": "{{count}} 个角色",
-    "cjkHint": "中文搜索只筛选本页已加载的角色",
     "empty": "没有找到角色",
-    "cooccurring": "常一起出现"
+    "cooccurring": "常一起出现",
+    "siteFamilies": "全站 {{count}} 组"
   }
 }

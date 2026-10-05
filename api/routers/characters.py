@@ -18,7 +18,7 @@ from utils import get_db_connection
 router = APIRouter(prefix="/v1/characters", tags=["characters"])
 
 # The unfiltered list hides characters below this many families.
-MIN_LISTED_FAMILIES = 5
+MIN_LISTED_FAMILIES = 20
 
 SUMMARY_SQL = """
     SELECT t.id, t.name, s.family_count, w.name AS work,
@@ -32,12 +32,6 @@ SUMMARY_SQL = """
 """
 
 
-def _like_pattern(q: str) -> str:
-    """Substring pattern for ILIKE ... ESCAPE '\\'; spaces match '_'."""
-    escaped = q.replace(" ", "_").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
 def _summary(row) -> CharacterSummary:
     cover = None
     if row["cover_post_id"] is not None:
@@ -48,22 +42,14 @@ def _summary(row) -> CharacterSummary:
 
 @router.get("", response_model=ListCharactersResponse)
 def list_characters(
-    q: Optional[str] = Query(default=None, description="Substring of the tag name; spaces match '_'"),
     work: Optional[str] = Query(default=None, description="Exact copyright tag name"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=24, ge=1, le=100),
 ):
-    conditions, params = [], []
-    if q:
-        conditions.append("t.name ILIKE %s ESCAPE '\\'")
-        params.append(_like_pattern(q))
     if work:
-        conditions.append("w.name = %s")
-        params.append(work)
-    if not conditions:
-        conditions.append("s.family_count >= %s")
-        params.append(MIN_LISTED_FAMILIES)
-    where = " WHERE " + " AND ".join(conditions)
+        where, params = " WHERE w.name = %s", [work]
+    else:
+        where, params = " WHERE s.family_count >= %s", [MIN_LISTED_FAMILIES]
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:

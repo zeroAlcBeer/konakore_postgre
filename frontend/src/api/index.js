@@ -87,9 +87,8 @@ export const getTasks = async () => {
   return response.data;
 };
 
-export const getCharacters = async ({ q = null, work = null, page = 1, limit = 24 } = {}) => {
+export const getCharacters = async ({ work = null, page = 1, limit = 24 } = {}) => {
   const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
-  if (q) params.append('q', q);
   if (work) params.append('work', work);
   const response = await apiClient.get(`/v1/characters?${params}`);
   return response.data;

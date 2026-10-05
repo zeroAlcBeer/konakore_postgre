@@ -8,6 +8,8 @@ import urllib.parse
 
 import pytest
 
+from routers.characters import MIN_LISTED_FAMILIES as MIN
+
 CHARACTER, COPYRIGHT = 4, 3
 
 
@@ -65,11 +67,15 @@ def names(response):
     return [c["name"] for c in response.json()["characters"]]
 
 
+def test_long_tail_threshold_is_20_families():
+    assert MIN == 20  # docs/characters.md, API
+
+
 def test_list_orders_by_families_then_name_and_hides_the_long_tail(client, lib):
-    lib.families("dave", 6)
-    lib.families("alice", 6)
-    lib.families("bob", 5)
-    lib.families("carol", 4)
+    lib.families("dave", MIN + 1)
+    lib.families("alice", MIN + 1)
+    lib.families("bob", MIN)
+    lib.families("carol", MIN - 1)
     lib.refresh()
 
     r = client.get("/v1/characters")
@@ -79,7 +85,7 @@ def test_list_orders_by_families_then_name_and_hides_the_long_tail(client, lib):
 
 def test_list_pages(client, lib):
     for i, name in enumerate(["a", "b", "c"]):
-        lib.families(name, 7 - i)
+        lib.families(name, MIN + 2 - i)
     lib.refresh()
 
     r = client.get("/v1/characters?page=2&limit=2")
@@ -87,17 +93,6 @@ def test_list_pages(client, lib):
     p = r.json()["pagination"]
     assert (p["current_page"], p["per_page"], p["total_items"], p["total_pages"], p["has_next"], p["has_prev"]) == \
         (2, 2, 3, 2, False, True)
-
-
-def test_search_covers_every_character_case_insensitively(client, lib):
-    lib.post("hatsune_miku")
-    lib.post("hatsunexmiku")
-    lib.post("kagamine_rin")
-    lib.refresh()
-
-    # Space reads as "_", and "_" is literal, not a LIKE wildcard.
-    assert names(client.get("/v1/characters", params={"q": "E M"})) == ["hatsune_miku"]
-    assert names(client.get("/v1/characters", params={"q": "%"})) == []
 
 
 def test_work_filter_lists_all_characters_of_that_work(client, lib):
@@ -109,18 +104,19 @@ def test_work_filter_lists_all_characters_of_that_work(client, lib):
 
 
 def test_item_carries_work_and_cover(client, lib):
-    cover = lib.post("char_alice", work="work_x")
-    lib.post("char_bob", rating="e")
+    cover = lib.post("alice", work="work_x")
+    lib.post("bob", rating="e")
     lib.refresh()
 
-    items = {c["name"]: c for c in client.get("/v1/characters", params={"q": "char"}).json()["characters"]}
-    assert items["char_alice"] == {
-        "name": "char_alice", "family_count": 1, "work": "work_x",
+    alice = client.get("/v1/characters", params={"work": "work_x"}).json()["characters"][0]
+    assert alice == {
+        "name": "alice", "family_count": 1, "work": "work_x",
         "cover": {"post_id": cover,
                   "preview_url": f"https://konachan.net/preview/{cover}.jpg",
                   "sample_url": f"https://konachan.net/sample/{cover}.jpg"},
     }
-    assert items["char_bob"]["work"] is None and items["char_bob"]["cover"] is None
+    bob = client.get("/v1/characters/bob").json()
+    assert bob["work"] is None and bob["cover"] is None
 
 
 def test_detail_includes_cooccurring_characters(client, lib):
