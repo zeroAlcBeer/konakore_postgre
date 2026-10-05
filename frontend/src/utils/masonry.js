@@ -1,8 +1,8 @@
 // Masonry for the character index, with tiles that can span two columns.
 // Behaviour and bounds: docs/characters.md, UI.
 
-/** Columns by viewport width: 6 from 1200px, 4 from 900px, else 3. */
-export const columnsFor = (viewportWidth) => (viewportWidth >= 1200 ? 6 : viewportWidth >= 900 ? 4 : 3);
+/** Columns by viewport width: 4 from 1200px, else 3 (two leave gaps too wide to balance). */
+export const columnsFor = (viewportWidth) => (viewportWidth >= 1200 ? 4 : 3);
 
 /**
  * Boxes for tiles in order. A one-column tile goes to the shortest column; a

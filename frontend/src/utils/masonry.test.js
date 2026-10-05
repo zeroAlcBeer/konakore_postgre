@@ -28,8 +28,8 @@ function overlaps({ boxes }) {
 }
 
 describe('columnsFor', () => {
-  it('uses 6, 4 or 3 columns by width', () => {
-    expect([1440, 1200, 1199, 900, 899, 820].map(columnsFor)).toEqual([6, 6, 4, 4, 3, 3]);
+  it('uses 4 columns from 1200px, else 3', () => {
+    expect([1440, 1200, 1199, 900, 899, 820].map(columnsFor)).toEqual([4, 4, 3, 3, 3, 3]);
   });
 });
 

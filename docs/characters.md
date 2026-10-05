@@ -129,7 +129,8 @@ keep it.
 
 **Characters tab** (`frontend/src/pages/CharactersPage.jsx`, `/characters`):
 a masonry of covers in pages of 40 (`?page=`, page links at the foot), in
-rank order. Columns: 6 from 1200px wide, 4 from 900px, else 3. Each tile is
+rank order. Columns: 4 from 1200px wide, else 3 (two columns are too few for
+the balancing below to close the gap a wide tile leaves). Each tile is
 one column wide and as tall as its cover's shape (`cover.width` /
 `cover.height`, 3:2 when unknown) and goes to the shortest column. Each
 tile shows the cover cropped to fill, and over a dark fade at its foot the
