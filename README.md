@@ -27,9 +27,11 @@ history if you need them.
 ## Development
 
 ```
-make up      # local stack via docker-compose.yaml
-make local   # frontend dev server against the remote API (frontend/.env)
-make help    # everything else
+make up           # local stack via docker-compose.yaml
+make local        # frontend dev server against the remote API (frontend/.env)
+make test-worker  # worker tests against a throwaway pgvector Postgres
+make test-api     # api tests, same throwaway Postgres
+make help         # everything else
 ```
 
 ## Deployment

@@ -35,7 +35,8 @@ def _get_pool():
                 _pool = pg_pool.ThreadedConnectionPool(
                     minconn=1,
                     maxconn=int(os.getenv("DB_POOL_MAX", "10")),
-                    host="postgres",
+                    host=os.getenv("POSTGRES_HOST", "postgres"),
+                    port=int(os.getenv("POSTGRES_PORT", "5432")),
                     dbname=os.getenv("POSTGRES_DB"),
                     user=os.getenv("POSTGRES_USER"),
                     password=os.getenv("POSTGRES_PASSWORD")
