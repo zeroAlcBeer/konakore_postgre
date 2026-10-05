@@ -37,7 +37,7 @@ class Library:
         tag_ids = [self.tag(c) for c in characters]
         if work:
             tag_ids.append(self.tag(work, COPYRIGHT))
-        raw = {"id": post_id, "rating": rating, "score": 0,
+        raw = {"id": post_id, "rating": rating, "score": 0, "width": 1920, "height": 1080,
                "preview_url": f"https://konachan.net/preview/{post_id}.jpg",
                "sample_url": f"https://konachan.net/sample/{post_id}.jpg"}
         with self.conn.cursor() as cur:
@@ -113,7 +113,8 @@ def test_item_carries_work_and_cover(client, lib):
         "name": "alice", "family_count": 1, "work": "work_x",
         "cover": {"post_id": cover,
                   "preview_url": f"https://konachan.net/preview/{cover}.jpg",
-                  "sample_url": f"https://konachan.net/sample/{cover}.jpg"},
+                  "sample_url": f"https://konachan.net/sample/{cover}.jpg",
+                  "width": 1920, "height": 1080},
     }
     bob = client.get("/v1/characters/bob").json()
     assert bob["work"] is None and bob["cover"] is None

@@ -90,12 +90,14 @@ Response: `characters` plus the usual `pagination`. Each item:
   "name": "hatsune_miku",
   "family_count": 13861,
   "work": "vocaloid",
-  "cover": {"post_id": 123, "preview_url": "https://...", "sample_url": "https://..."}
+  "cover": {"post_id": 123, "preview_url": "https://...", "sample_url": "https://...", "width": 1920, "height": 1080}
 }
 ```
 
 `work` and `cover` are null when the character has none (see
-Definitions); `cover` is the pick when one is set. Image URLs are the upstream ones from the post's raw data;
+Definitions); `cover` is the pick when one is set. `width` and `height` are
+the post's own pixel size (null when upstream has none), so a client can lay
+covers out by shape before the images load. Image URLs are the upstream ones from the post's raw data;
 the frontend maps them as it does for posts.
 
 `GET /v1/characters/{name}` returns the same fields plus `cooccurring`:
@@ -126,23 +128,26 @@ the lightbox. The search tag lives in the URL, so back, reload and links
 keep it.
 
 **Characters tab** (`frontend/src/pages/CharactersPage.jsx`, `/characters`):
-a mosaic of covers, edge to edge, in pages of 40 (`?page=`, page links
-at the foot). Within each page a tile's size follows its rank on that page:
-the first character takes a 3x3 tile, the next four 2x2, the rest 1x1, so
-every page opens with its own lead (on narrow screens the first tile is
-3x2). On a six-column screen a page fills ten rows exactly. Each tile shows
-the cover cropped to fill, and over a dark fade at its foot the Chinese
-name (else the tag name), the family count and the work. The work filter
-(`?work=`, set from the info bar's work link) shows as a chip that clears
-it. Clicking a tile opens `/?tag=<name>`.
+a masonry of covers in pages of 40 (`?page=`, page links at the foot), in
+rank order. Columns: 6 from 1200px wide, 4 from 900px, else 3. Each tile is
+one column wide and as tall as its cover's shape (`cover.width` /
+`cover.height`, 3:2 when unknown) and goes to the shortest column. Each
+tile shows the cover cropped to fill, and over a dark fade at its foot the
+Chinese name (else the tag name), the family count and the work. The work
+filter (`?work=`, set from the info bar's work link) shows as a chip that
+clears it. Clicking a tile opens `/?tag=<name>`.
 
-**Set as cover** (lightbox toolbar, `frontend/src/hooks/usePhotoSwipe.js`):
-shown when the current post has at least one character
-(`GET /v1/posts/{id}/characters`), hidden otherwise. The pick is for the
-character the gallery is searching (`?tag=`) when the post shows it, else
-for the post's only character; it confirms in the lightbox. A post with
-several characters, opened outside a search for one of them, shows an error
-pointing to that character's search instead.
+The page breathes: every 4 seconds one tile, chosen uniformly among the
+others, spans two columns at twice the size, up to 3 at once; when a fourth
+grows the oldest shrinks back. Later tiles reflow down. A wide tile lands
+where its two columns end closest together, and before it does both
+columns' tiles since their last such line stretch or squeeze (0.8x to
+1.25x of their natural height, covers crop) to meet on one line, so no
+holes open inside the masonry; the bottom edge is levelled the same way
+within that bound and may stay ragged when the gap is larger. Moves animate
+(transforms only, 700 ms). It pauses while the tab is hidden and for 10
+seconds after a touch, and never runs with reduced motion. Layout code:
+`frontend/src/utils/masonry.js`.
 
 **Character info bar** (`frontend/src/components/CharacterInfoBar.jsx`):
 under the gallery's search bar, in both the gallery and the favorites,

@@ -14,11 +14,8 @@ export function listRequest(searchParams) {
   return { work: searchParams.get('work') || null, page };
 }
 
-/** Characters per index page: one lead (3x3), four majors (2x2), 35 minors fill ten six-column rows. */
-export const LADDER_PAGE_SIZE = 40;
-
-/** Tile size from the rank within the page; every page opens with its own lead. */
-export const ladderTier = (indexOnPage) => (indexOnPage === 0 ? 'lead' : indexOnPage <= 4 ? 'major' : 'minor');
+/** Characters per index page. */
+export const INDEX_PAGE_SIZE = 40;
 
 /**
  * What the lightbox's set-as-cover button does for a post with these

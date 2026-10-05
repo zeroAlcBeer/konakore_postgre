@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LADDER_PAGE_SIZE, chineseName, coverAction, coverUrl, gallerySearchPath, ladderTier, listRequest,
+  chineseName, coverAction, coverUrl, gallerySearchPath, listRequest,
 } from './characters';
 
 describe('gallerySearchPath', () => {
@@ -44,18 +44,6 @@ describe('listRequest', () => {
     expect(listRequest(params(''))).toEqual({ work: null, page: 1 });
     expect(listRequest(params('page=0')).page).toBe(1);
     expect(listRequest(params('page=x')).page).toBe(1);
-  });
-});
-
-describe('ladderTier', () => {
-  it('sizes tiles by rank within the page', () => {
-    expect([0, 1, 4, 5, 39].map(ladderTier)).toEqual(['lead', 'major', 'major', 'minor', 'minor']);
-  });
-
-  it('fills ten six-column rows per page', () => {
-    const cells = { lead: 9, major: 4, minor: 1 };
-    const total = Array.from({ length: LADDER_PAGE_SIZE }, (_, i) => cells[ladderTier(i)]).reduce((a, b) => a + b);
-    expect(total).toBe(6 * 10);
   });
 });
 

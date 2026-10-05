@@ -26,7 +26,9 @@ SUMMARY_SQL = """
     SELECT t.id, t.name, s.family_count, w.name AS work,
            p.id AS cover_post_id,
            p.raw_data->>'preview_url' AS preview_url,
-           p.raw_data->>'sample_url' AS sample_url
+           p.raw_data->>'sample_url' AS sample_url,
+           (p.raw_data->>'width')::int AS cover_width,
+           (p.raw_data->>'height')::int AS cover_height
     FROM character_stats s
     JOIN tags t ON t.id = s.tag_id
     LEFT JOIN tags w ON w.id = s.work_tag_id
@@ -38,7 +40,8 @@ SUMMARY_SQL = """
 def _cover(row) -> Optional[CharacterCover]:
     if row["cover_post_id"] is None:
         return None
-    return CharacterCover(post_id=row["cover_post_id"], preview_url=row["preview_url"], sample_url=row["sample_url"])
+    return CharacterCover(post_id=row["cover_post_id"], preview_url=row["preview_url"], sample_url=row["sample_url"],
+                          width=row["cover_width"], height=row["cover_height"])
 
 
 def _summary(row) -> CharacterSummary:
@@ -86,7 +89,9 @@ def get_character(name: str):
                 SELECT o.name, c.family_count,
                        p.id AS cover_post_id,
                        p.raw_data->>'preview_url' AS preview_url,
-                       p.raw_data->>'sample_url' AS sample_url
+                       p.raw_data->>'sample_url' AS sample_url,
+                       (p.raw_data->>'width')::int AS cover_width,
+                       (p.raw_data->>'height')::int AS cover_height
                 FROM character_cooccurrence c
                 JOIN tags o ON o.id = c.other_tag_id
                 LEFT JOIN character_stats os ON os.tag_id = c.other_tag_id

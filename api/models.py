@@ -283,6 +283,8 @@ class CharacterCover(BaseModel):
     post_id: int
     preview_url: Optional[str] = None
     sample_url: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 
 class CharacterSummary(BaseModel):
