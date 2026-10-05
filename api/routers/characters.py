@@ -1,13 +1,15 @@
 """
 Characters router - the character page's list and detail.
 
-Reads the character_stats / character_cooccurrence materialized views;
-definitions and API contract in docs/characters.md.
+Reads the character_stats / character_cooccurrence materialized views and
+the owner's character_covers picks; definitions and API contract in
+docs/characters.md.
 """
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from psycopg2.extras import RealDictCursor
+from pydantic import BaseModel
 
 from models import (
     Character, CharacterCover, CharacterSummary, CooccurringCharacter,
@@ -28,7 +30,8 @@ SUMMARY_SQL = """
     FROM character_stats s
     JOIN tags t ON t.id = s.tag_id
     LEFT JOIN tags w ON w.id = s.work_tag_id
-    LEFT JOIN posts p ON p.id = s.cover_post_id
+    LEFT JOIN character_covers cc ON cc.tag_id = s.tag_id
+    LEFT JOIN posts p ON p.id = COALESCE(cc.post_id, s.cover_post_id)
 """
 
 
@@ -86,3 +89,38 @@ def get_character(name: str):
             cooccurring = [CooccurringCharacter(**r) for r in cur.fetchall()]
 
     return Character(**_summary(row).model_dump(), cooccurring=cooccurring)
+
+
+class SetCoverRequest(BaseModel):
+    post_id: int
+
+
+# Custom method (AIP-136); :path keeps names containing "/" matchable.
+@router.post("/{name:path}:setCover", status_code=204)
+def set_cover(name: str, body: SetCoverRequest):
+    """Make a single-character post the character's cover (see Cover picks)."""
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT 1 FROM posts WHERE id = %s", (body.post_id,))
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail=f"Post {body.post_id} not found")
+            cur.execute("""
+                SELECT t.id, t.name FROM character_posts cp JOIN tags t ON t.id = cp.tag_id
+                WHERE cp.post_id = %s
+            """, (body.post_id,))
+            on_post = {row["name"]: row["id"] for row in cur.fetchall()}
+            # character_posts owns the definition, exclusions included.
+            cur.execute("""
+                SELECT 1 FROM character_posts cp JOIN tags t ON t.id = cp.tag_id WHERE t.name = %s LIMIT 1
+            """, (name,))
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail=f"Character {name!r} not found")
+            if name not in on_post:
+                raise HTTPException(status_code=400, detail=f"Post {body.post_id} does not show {name!r}")
+            if len(on_post) > 1:
+                raise HTTPException(status_code=409, detail="A cover must show a single character")
+            cur.execute("""
+                INSERT INTO character_covers (tag_id, post_id) VALUES (%s, %s)
+                ON CONFLICT (tag_id) DO UPDATE SET post_id = EXCLUDED.post_id, set_at = NOW()
+            """, (on_post[name], body.post_id))
+    return Response(status_code=204)

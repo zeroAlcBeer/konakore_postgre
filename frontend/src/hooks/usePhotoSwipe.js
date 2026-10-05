@@ -1,8 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import PhotoSwipeLightbox from 'photoswipe/lightbox';
 import 'photoswipe/style.css';
 import PhotoSwipeFullscreen from '../utils/photoswipe-fullscreen.esm';
 import { getImageUrl } from '../utils/imageUtils';
+import { registerCoverButton } from '../utils/pswpCoverButton';
 
 const HEART_PATH = 'M16 28.5l-1.8-1.6C7.4 20.8 3 16.8 3 12c0-3.9 3.1-7 7-7 2.2 0 4.3 1 5.6 2.7L16 8l.4-.3C17.7 6 19.8 5 22 5c3.9 0 7 3.1 7 7 0 4.8-4.4 8.8-11.2 14.9L16 28.5z';
 
@@ -35,6 +37,7 @@ export function usePhotoSwipe({
   onToggleLike,
   posts,
 }) {
+  const queryClientRef = useRef(useQueryClient());
   const lightboxRef = useRef(null);
   const slideshowRef = useRef({ interval: null, isPlaying: false });
   const groupMapRef = useRef(null);
@@ -189,6 +192,14 @@ export function usePhotoSwipe({
 
           return false;
         }
+      });
+
+      // Set-as-cover; a new pick shows on the character index and info bar.
+      registerCoverButton(pswp, {
+        onCoverSet: (name) => {
+          queryClientRef.current.invalidateQueries({ queryKey: ['characters'] });
+          queryClientRef.current.invalidateQueries({ queryKey: ['character', name] });
+        },
       });
 
       // Update like button on slide change

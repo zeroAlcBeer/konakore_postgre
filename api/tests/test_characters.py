@@ -145,3 +145,51 @@ def test_detail_404s_for_unknown_and_excluded_names(client, lib):
 
     assert client.get("/v1/characters/nobody").status_code == 404
     assert client.get("/v1/characters/" + urllib.parse.quote("tagme_(character)", safe="")).status_code == 404
+
+
+def set_cover(client, name, post_id):
+    return client.post(f"/v1/characters/{urllib.parse.quote(name, safe='')}:setCover", json={"post_id": post_id})
+
+
+def cover_id(client, name):
+    return client.get(f"/v1/characters/{urllib.parse.quote(name, safe='')}").json()["cover"]["post_id"]
+
+
+def test_set_cover_overrides_the_automatic_one_at_once(client, lib):
+    auto = lib.post("alice")
+    explicit = lib.post("alice", rating="e")
+    later = lib.post("alice", "tagme_(character)", rating="q")  # excluded tags do not count
+    lib.refresh()
+    assert cover_id(client, "alice") == auto
+
+    assert set_cover(client, "alice", explicit).status_code == 204
+    assert cover_id(client, "alice") == explicit  # no view refresh needed
+
+    assert set_cover(client, "alice", later).status_code == 204
+    assert cover_id(client, "alice") == later
+
+
+def test_set_cover_rejects_group_shots_and_foreign_posts(client, lib):
+    lib.post("alice")
+    group = lib.post("alice", "bob")
+    foreign = lib.post("bob")
+    lib.refresh()
+
+    assert set_cover(client, "alice", group).status_code == 409
+    assert set_cover(client, "alice", foreign).status_code == 400
+    assert set_cover(client, "nobody", foreign).status_code == 404
+    assert set_cover(client, "tagme_(character)", foreign).status_code == 404
+    assert set_cover(client, "alice", 999999).status_code == 404
+
+
+def test_post_characters_lists_only_characters(client, lib):
+    group = lib.post("alice", "bob", "tagme_(character)", work="work_x")
+    lib.tag("scenery", 0)
+    with lib.conn.cursor() as cur:
+        cur.execute("INSERT INTO posts (id, raw_data) VALUES (500, %s)", (json.dumps({"id": 500, "rating": "s"}),))
+        cur.execute("INSERT INTO post_tags (post_id, tag_id) VALUES (500, %s)", (lib.tag_ids["scenery"],))
+    lib.refresh()
+
+    assert client.get(f"/v1/posts/{group}/characters").json() == {"characters": ["alice", "bob"]}
+    assert client.get("/v1/posts/500/characters").json() == {"characters": []}
+    assert client.get("/v1/posts/999999/characters").status_code == 404

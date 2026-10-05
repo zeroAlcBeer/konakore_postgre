@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { chineseName, coverUrl, gallerySearchPath, listRequest } from './characters';
+import {
+  LADDER_PAGE_SIZE, chineseName, coverAction, coverUrl, gallerySearchPath, ladderTier, listRequest,
+} from './characters';
 
 describe('gallerySearchPath', () => {
   it('opens the gallery on a tag search, encoding the name', () => {
@@ -42,5 +44,31 @@ describe('listRequest', () => {
     expect(listRequest(params(''))).toEqual({ work: null, page: 1 });
     expect(listRequest(params('page=0')).page).toBe(1);
     expect(listRequest(params('page=x')).page).toBe(1);
+  });
+});
+
+describe('ladderTier', () => {
+  it('sizes tiles by rank within the page', () => {
+    expect([0, 1, 4, 5, 39].map(ladderTier)).toEqual(['lead', 'major', 'major', 'minor', 'minor']);
+  });
+
+  it('fills ten six-column rows per page', () => {
+    const cells = { lead: 9, major: 4, minor: 1 };
+    const total = Array.from({ length: LADDER_PAGE_SIZE }, (_, i) => cells[ladderTier(i)]).reduce((a, b) => a + b);
+    expect(total).toBe(6 * 10);
+  });
+});
+
+describe('coverAction', () => {
+  it('hides the button for posts without characters', () => {
+    expect(coverAction([])).toEqual({ visible: false });
+  });
+
+  it('sets the only character', () => {
+    expect(coverAction(['hatsune_miku'])).toEqual({ visible: true, character: 'hatsune_miku' });
+  });
+
+  it('refuses group shots', () => {
+    expect(coverAction(['hatsune_miku', 'kagamine_rin'])).toEqual({ visible: true, error: 'multiple' });
   });
 });

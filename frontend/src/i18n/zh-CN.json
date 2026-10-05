@@ -119,6 +119,10 @@
     "total": "{{count}} 个角色",
     "empty": "没有找到角色",
     "cooccurring": "常一起出现",
-    "siteFamilies": "全站 {{count}} 组"
+    "siteFamilies": "全站 {{count}} 组",
+    "setCover": "设为角色封面",
+    "coverSet": "已设为「{{name}}」的封面",
+    "coverNeedsSingle": "这张图有多个角色，封面只能用单人图",
+    "coverFailed": "设置封面失败，请重试"
   }
 }

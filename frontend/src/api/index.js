@@ -98,3 +98,12 @@ export const getCharacter = async (name) => {
   const response = await apiClient.get(`/v1/characters/${encodeURIComponent(name)}`);
   return response.data;
 };
+
+export const getPostCharacters = async (postId) => {
+  const response = await apiClient.get(`/v1/posts/${postId}/characters`);
+  return response.data.characters;
+};
+
+export const setCharacterCover = async (name, postId) => {
+  await apiClient.post(`/v1/characters/${encodeURIComponent(name)}:setCover`, { post_id: postId });
+};

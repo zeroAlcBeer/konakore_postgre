@@ -128,6 +128,21 @@ def get_page_for_id(
             return {"page": page, "position": position}
 
 
+@router.get("/{post_id}/characters")
+def get_post_characters(post_id: int):
+    """The post's characters, as defined in docs/characters.md."""
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT 1 FROM posts WHERE id = %s", (post_id,))
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail=f"Post with id {post_id} not found")
+            cur.execute("""
+                SELECT t.name FROM character_posts cp JOIN tags t ON t.id = cp.tag_id
+                WHERE cp.post_id = %s ORDER BY t.name
+            """, (post_id,))
+            return {"characters": [row["name"] for row in cur.fetchall()]}
+
+
 @router.get("/{post_id}", response_model=GetPostResponse)
 def get_post(post_id: int):
     """Get a specific post by ID."""

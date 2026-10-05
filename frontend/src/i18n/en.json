@@ -119,6 +119,10 @@
     "total": "{{count}} characters",
     "empty": "No characters found",
     "cooccurring": "Often appears with",
-    "siteFamilies": "{{count}} sets site-wide"
+    "siteFamilies": "{{count}} sets site-wide",
+    "setCover": "Set as character cover",
+    "coverSet": "Now the cover of {{name}}",
+    "coverNeedsSingle": "This image shows several characters; a cover must show one",
+    "coverFailed": "Could not set the cover, try again"
   }
 }

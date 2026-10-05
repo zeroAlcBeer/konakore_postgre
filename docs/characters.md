@@ -18,16 +18,17 @@ by. A family counts for a tag when at least one of its posts carries it.
 - **Work**: the copyright tag (`type = 3`) that appears on the same post as
   the character in the most families; ties go to the lower tag id. NULL when
   the character never appears with a copyright tag.
-- **Cover**: one post rated `s`, picked by, in order:
+- **Cover**: the owner's pick when there is one (see Cover picks), else one
+  post rated `s`, picked by, in order:
   1. the post's only character tag is this character;
   2. the post has none of `2girls`, `group`, `chibi`, `sketch`,
      `monochrome`, `no_humans`;
   3. higher konachan `score`;
   4. newer post id.
 
-  NULL when the character has no `s` post. Two characters may share a
-  cover; preferring single-character posts keeps that rare, so there is no
-  cross-character dedupe.
+  NULL when the character has no `s` post and no pick. Two characters may
+  share an automatic cover; preferring single-character posts keeps that
+  rare, so there is no cross-character dedupe.
 - **Co-occurring characters**: other characters on the same post, counted
   by families, the top 10 per character (ties go to the lower tag id).
 
@@ -55,6 +56,20 @@ At design time (2026-10) the mirror had 34,543 characters with posts
 (after the exclusions), 10,781 of them with at least 5 families. Building
 both views took 7 s on the production Pi.
 
+## Cover picks
+
+The owner can make any post that shows exactly one character, of any
+rating, that character's cover. Picks are user state, so they live in
+their own table, not in the views: `character_covers` (`tag_id` primary
+key, `post_id`, `set_at`; migration `012_character_covers.sql`). A new pick
+replaces the old one and takes effect at once, without waiting for a view
+refresh. Deleting the post deletes the pick, and the automatic cover
+returns.
+
+"One character" counts characters as defined above, so an excluded tag
+next to the character does not block a pick. Group shots cannot be picked
+because the same image would then speak for several characters.
+
 ## API
 
 `api/routers/characters.py`. Characters are addressed by tag name; clients
@@ -81,13 +96,21 @@ Response: `characters` plus the usual `pagination`. Each item:
 ```
 
 `work` and `cover` are null when the character has none (see
-Definitions). Image URLs are the upstream ones from the post's raw data;
+Definitions); `cover` is the pick when one is set. Image URLs are the upstream ones from the post's raw data;
 the frontend maps them as it does for posts.
 
 `GET /v1/characters/{name}` returns the same fields plus `cooccurring`:
 up to 10 `{"name", "family_count"}` items, most families first. 404 when
 the name is not a character with posts, including the excluded tags, so it
 also answers "is this tag a character".
+
+`POST /v1/characters/{name}:setCover` with `{"post_id": 123}` sets the
+pick and returns 204. 404 when the name is not a character or the post
+does not exist; 400 when the post does not carry the
+character's tag; 409 when the post shows more than one character.
+
+`GET /v1/posts/{id}/characters` returns `{"characters": ["name", ...]}`: the
+characters on that post, by the definition above. 404 for an unknown post.
 
 The character's posts are not part of this API: the gallery's tag search
 (`POST /v1/tags:search`) shows them, paged by family.
@@ -101,11 +124,21 @@ the lightbox. The search tag lives in the URL, so back, reload and links
 keep it.
 
 **Characters tab** (`frontend/src/pages/CharactersPage.jsx`, `/characters`):
-an index of cards, no search box. The work filter and the page live in the
-URL (`?work=`, `?page=`). Each card: the cover (`sample_url`, else
-`preview_url`) cropped to 3:2, the Chinese name when the translation table
-has one and the tag name, the work (clicking it sets the work filter), and
-the family count. Clicking the card opens `/?tag=<name>`.
+a mosaic of covers, edge to edge, in pages of 40 (`?page=`, page links
+at the foot). Within each page a tile's size follows its rank on that page:
+the first character takes a 3x3 tile, the next four 2x2, the rest 1x1, so
+every page opens with its own lead (on narrow screens the first tile is
+3x2). On a six-column screen a page fills ten rows exactly. Each tile shows
+the cover cropped to fill, and over a dark fade at its foot the Chinese
+name (else the tag name), the family count and the work. The work filter
+(`?work=`, set from the info bar's work link) shows as a chip that clears
+it. Clicking a tile opens `/?tag=<name>`.
+
+**Set as cover** (lightbox toolbar, `frontend/src/hooks/usePhotoSwipe.js`):
+shown when the current post has at least one character
+(`GET /v1/posts/{id}/characters`), hidden otherwise. With one character it
+sets the pick and confirms in the lightbox; with several it only shows an
+error that a cover needs a single-character image.
 
 **Character info bar** (`frontend/src/components/CharacterInfoBar.jsx`):
 under the gallery's search bar, in both the gallery and the favorites,
