@@ -88,6 +88,15 @@ var taskDefs = map[string]TaskDefinition{
 			"interval": "1m",
 		},
 	},
+	"matviews": {
+		ID:       "matviews",
+		Name:     "Refresh materialized views",
+		Type:     "worker",
+		Category: "matviews",
+		Config: map[string]any{
+			"interval": "10m",
+		},
+	},
 	"embeddings-rebuild": {
 		ID:       "embeddings-rebuild",
 		Name:     "Rebuild tag embeddings",
@@ -123,6 +132,7 @@ func (w *Worker) startBackgroundTasks(ctx context.Context) {
 	go w.runLikesMigration(ctx)
 	go w.runEmbeddings(ctx)
 	go w.runFamiliesRefresher(ctx)
+	go w.runMatviewsRefresher(ctx)
 }
 
 func taskDef(id string) TaskDefinition {

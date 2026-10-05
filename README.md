@@ -18,6 +18,12 @@ communicates through Postgres. The Python `scheduler/` and `file_sync/`
 services that predated the Go worker were removed in 2026-07 — see git
 history if you need them.
 
+## Docs
+
+| Topic | Doc |
+|---|---|
+| Stats page: data source, `stats_posts` view, refresh task | [docs/stats.md](docs/stats.md) |
+
 ## Development
 
 ```
