@@ -35,12 +35,14 @@ SUMMARY_SQL = """
 """
 
 
+def _cover(row) -> Optional[CharacterCover]:
+    if row["cover_post_id"] is None:
+        return None
+    return CharacterCover(post_id=row["cover_post_id"], preview_url=row["preview_url"], sample_url=row["sample_url"])
+
+
 def _summary(row) -> CharacterSummary:
-    cover = None
-    if row["cover_post_id"] is not None:
-        cover = CharacterCover(post_id=row["cover_post_id"], preview_url=row["preview_url"],
-                               sample_url=row["sample_url"])
-    return CharacterSummary(name=row["name"], family_count=row["family_count"], work=row["work"], cover=cover)
+    return CharacterSummary(name=row["name"], family_count=row["family_count"], work=row["work"], cover=_cover(row))
 
 
 @router.get("", response_model=ListCharactersResponse)
@@ -79,14 +81,22 @@ def get_character(name: str):
             row = cur.fetchone()
             if row is None:
                 raise HTTPException(status_code=404, detail=f"Character {name!r} not found")
+            # Each peer's own cover: pick, else automatic (as in SUMMARY_SQL).
             cur.execute("""
-                SELECT o.name, c.family_count
+                SELECT o.name, c.family_count,
+                       p.id AS cover_post_id,
+                       p.raw_data->>'preview_url' AS preview_url,
+                       p.raw_data->>'sample_url' AS sample_url
                 FROM character_cooccurrence c
                 JOIN tags o ON o.id = c.other_tag_id
+                LEFT JOIN character_stats os ON os.tag_id = c.other_tag_id
+                LEFT JOIN character_covers cc ON cc.tag_id = c.other_tag_id
+                LEFT JOIN posts p ON p.id = COALESCE(cc.post_id, os.cover_post_id)
                 WHERE c.tag_id = %s
                 ORDER BY c.family_count DESC, c.other_tag_id
             """, (row["id"],))
-            cooccurring = [CooccurringCharacter(**r) for r in cur.fetchall()]
+            cooccurring = [CooccurringCharacter(name=r["name"], family_count=r["family_count"], cover=_cover(r))
+                           for r in cur.fetchall()]
 
     return Character(**_summary(row).model_dump(), cooccurring=cooccurring)
 

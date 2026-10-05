@@ -118,7 +118,6 @@
     "families": "{{count}} sets",
     "total": "{{count}} characters",
     "empty": "No characters found",
-    "cooccurring": "Often appears with",
     "siteFamilies": "{{count}} sets site-wide",
     "setCover": "Set as character cover",
     "coverSet": "Now the cover of {{name}}",

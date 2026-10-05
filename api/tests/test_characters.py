@@ -119,17 +119,22 @@ def test_item_carries_work_and_cover(client, lib):
     assert bob["work"] is None and bob["cover"] is None
 
 
-def test_detail_includes_cooccurring_characters(client, lib):
+def test_detail_includes_cooccurring_characters_with_their_covers(client, lib):
     for _ in range(2):
         lib.post("saber_(fate)", "rin")
     lib.post("saber_(fate)", "sakura")
+    rin_solo = lib.post("rin")
+    sakura_pick = lib.post("sakura", rating="q")
     lib.refresh()
+    assert set_cover(client, "sakura", sakura_pick).status_code == 204
 
     r = client.get("/v1/characters/" + urllib.parse.quote("saber_(fate)", safe=""))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["name"] == "saber_(fate)" and body["family_count"] == 3
-    assert body["cooccurring"] == [{"name": "rin", "family_count": 2}, {"name": "sakura", "family_count": 1}]
+    peers = [(p["name"], p["family_count"], p["cover"]["post_id"]) for p in body["cooccurring"]]
+    assert peers == [("rin", 2, rin_solo), ("sakura", 1, sakura_pick)]
+    assert body["cooccurring"][0]["cover"]["preview_url"] == f"https://konachan.net/preview/{rin_solo}.jpg"
 
 
 def test_detail_accepts_a_slash_in_the_name(client, lib):

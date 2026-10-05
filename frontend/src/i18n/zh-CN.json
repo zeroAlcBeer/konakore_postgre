@@ -118,7 +118,6 @@
     "families": "{{count}} 组",
     "total": "{{count}} 个角色",
     "empty": "没有找到角色",
-    "cooccurring": "常一起出现",
     "siteFamilies": "全站 {{count}} 组",
     "setCover": "设为角色封面",
     "coverSet": "已设为「{{name}}」的封面",

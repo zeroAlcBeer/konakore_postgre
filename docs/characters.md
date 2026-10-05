@@ -99,7 +99,10 @@ Definitions); `cover` is the pick when one is set. Image URLs are the upstream o
 the frontend maps them as it does for posts.
 
 `GET /v1/characters/{name}` returns the same fields plus `cooccurring`:
-up to 10 `{"name", "family_count"}` items, most families first. 404 when
+up to 10 `{"name", "family_count", "cover"}` items, most families first,
+where `family_count` counts the families shared with the character and
+`cover` is that character's own cover (pick or automatic, same shape as
+above, null when none). 404 when
 the name is not a character with posts, including the excluded tags, so it
 also answers "is this tag a character".
 
@@ -132,6 +135,27 @@ the cover cropped to fill, and over a dark fade at its foot the Chinese
 name (else the tag name), the family count and the work. The work filter
 (`?work=`, set from the info bar's work link) shows as a chip that clears
 it. Clicking a tile opens `/?tag=<name>`.
+
+**Set as cover** (lightbox toolbar, `frontend/src/hooks/usePhotoSwipe.js`):
+shown when the current post has at least one character
+(`GET /v1/posts/{id}/characters`), hidden otherwise. The pick is for the
+character the gallery is searching (`?tag=`) when the post shows it, else
+for the post's only character; it confirms in the lightbox. A post with
+several characters, opened outside a search for one of them, shows an error
+pointing to that character's search instead.
+
+**Character info bar** (`frontend/src/components/CharacterInfoBar.jsx`):
+under the gallery's search bar, in both the gallery and the favorites,
+whenever the searched tag is a character (`GET /v1/characters/{name}`
+returns it). A banner the width of the gallery shows the character's cover,
+cropped to fill behind a dark fade on its left, and over the fade the
+Chinese name (else the tag name) large, the tag name, the work (linking to
+`/characters?work=`) and the site-wide family count (labelled as
+site-wide, since the favorites grid shows fewer). Under the banner, with
+no heading, one scrollable row of buttons for the co-occurring characters:
+each a small round crop of their cover, their name and the shared family
+count; pressing one switches the search to them. Nothing shows for other
+tags, for no search, or while the lookup is in flight.
 
 **Set as cover** (lightbox toolbar, `frontend/src/hooks/usePhotoSwipe.js`):
 shown when the current post has at least one character

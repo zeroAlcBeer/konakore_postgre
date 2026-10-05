@@ -295,7 +295,8 @@ class CharacterSummary(BaseModel):
 
 class CooccurringCharacter(BaseModel):
     name: str
-    family_count: int
+    family_count: int = Field(..., description="Families shared with the character")
+    cover: Optional[CharacterCover] = None
 
 
 class Character(CharacterSummary):
