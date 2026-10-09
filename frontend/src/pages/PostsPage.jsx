@@ -1,7 +1,7 @@
 import React, { useState, useReducer, useMemo, useEffect, useCallback, useTransition, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Navigate, useSearchParams } from 'react-router-dom';
 
 import SearchBar from '../components/SearchBar';
 import MasonryGrid from '../components/MasonryGrid';
@@ -9,7 +9,7 @@ import AppLayout from '../components/AppLayout';
 import PaginationControls from '../components/PaginationControls';
 import SimplePagination from '../components/SimplePagination';
 import LazyImageCard from '../components/LazyImageCard';
-import { getPosts, searchTags, getSandboxPosts, getPost } from '../api';
+import { getPosts, searchTags, getSandboxPosts, getCharacter } from '../api';
 import { useTag } from '../contexts/TagContext';
 import { tagManager } from '../utils/TagManager';
 import { Box, CircularProgress, Typography, Snackbar, Alert, Button } from '@mui/material';
@@ -20,8 +20,8 @@ import ImageSizeModal from '../components/ImageSizeModal';
 import { usePhotoSwipe } from '../hooks/usePhotoSwipe';
 import { usePostsProcessing } from '../hooks/usePostsProcessing';
 import { useToggleLike, POST_LIST_KEY } from '../hooks/useToggleLike';
+import { characterPath } from '../utils/characters';
 import CaptionContent from '../components/CaptionContent';
-import CharacterInfoBar from '../components/CharacterInfoBar';
 import { useTranslation } from 'react-i18next';
 
 // What differs between the main feed and the favorites view.
@@ -335,17 +335,14 @@ const PostsPage = ({ scope = 'all' }) => {
     return () => clearTimeout(timeoutId);
   }, [shouldFetchTagInfo, currentPage, perPage, fetchTagInfo]);
 
-  // A post opened outside the grid (a character's cover). Cached under POST_LIST_KEY
-  // in list shape so likes reach it like any list.
-  const queryClient = useQueryClient();
-  const [coverPostId, setCoverPostId] = useState(null);
-  const { data: coverData } = useQuery({
-    queryKey: [POST_LIST_KEY, 'cover', coverPostId],
-    queryFn: () => getPost(coverPostId).then((post) => ({ posts: [post] })),
-    enabled: coverPostId != null,
+  // A character tag has its own page (docs/characters.md, UI); same query as its banner there.
+  const { data: searchedCharacter } = useQuery({
+    queryKey: ['character', searchQuery],
+    queryFn: () => getCharacter(searchQuery),
+    enabled: !!searchQuery,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
-  const coverPost = coverData?.posts[0] || null;
 
   const {
     posts, postsForGrid, displayPosts, groupMap,
@@ -419,33 +416,27 @@ const PostsPage = ({ scope = 'all' }) => {
   }, [currentPageTags, mergeTagsWithCache]);
 
   // --- PHOTOSWIPE ---
-  const lightboxPosts = useMemo(() => (coverPost ? [...posts, coverPost] : posts), [posts, coverPost]);
-  const { onImageClick, openPosts, activePostId, captionContainerRef, closeLightboxAndSearch } = usePhotoSwipe({
+  const { onImageClick, activePostId, captionContainerRef, closeLightboxAndSearch } = usePhotoSwipe({
     displayPosts,
     groupMap,
     handleTagClick,
     onToggleLike: handleToggleLike,
-    posts: lightboxPosts,
+    posts,
     searchTag: searchQuery,
   });
 
-  const handleOpenCover = useCallback(async (postId) => {
-    const data = await queryClient.fetchQuery({
-      queryKey: [POST_LIST_KEY, 'cover', postId],
-      queryFn: () => getPost(postId).then((post) => ({ posts: [post] })),
-      staleTime: 5 * 60 * 1000,
-    });
-    setCoverPostId(postId);
-    openPosts(data.posts);
-  }, [queryClient, openPosts]);
-
-  // Caption post, looked up among all posts including grouped children and the cover
+  // Caption post, looked up among all posts including grouped children
   const activePost = useMemo(() => {
     if (!activePostId) return null;
-    return postsForGrid.find(p => p.id === activePostId) || (coverPost?.id === activePostId ? coverPost : null);
-  }, [activePostId, postsForGrid, coverPost]);
+    return postsForGrid.find(p => p.id === activePostId) || null;
+  }, [activePostId, postsForGrid]);
 
   // --- RENDER ---
+
+  if (searchedCharacter) {
+    const liked = scope === 'liked' ? '?liked=1' : '';
+    return <Navigate replace to={characterPath(searchedCharacter.name) + liked} />;
+  }
 
   return (
     <AppLayout>
@@ -473,7 +464,6 @@ const PostsPage = ({ scope = 'all' }) => {
         totalPosts={totalPosts}
         availableTags={availableTags}
       />
-      {searchQuery && <CharacterInfoBar tag={searchQuery} onSelect={handleSearch} onOpenCover={handleOpenCover} />}
 
       <Box sx={{
         mx: 'auto',

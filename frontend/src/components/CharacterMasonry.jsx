@@ -1,9 +1,9 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Box } from '@mui/material';
 
-import { chineseName, coverUrl, gallerySearchPath } from '../utils/characters';
+import { characterPath, chineseName, coverUrl } from '../utils/characters';
 import { breatheStep, columnsFor, masonryLayout } from '../utils/masonry';
 
 // Rhythm and motion; the contract is docs/characters.md, UI.
@@ -20,6 +20,7 @@ const pickUniform = (candidates) => candidates[Math.floor(Math.random() * candid
 
 function Tile({ character, box, wide, eager, translations, tileRef }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const name = chineseName(character.name, translations) || character.name;
   const work = character.work ? chineseName(character.work, translations) || character.work : null;
   const cover = coverUrl(character.cover);
@@ -27,7 +28,8 @@ function Tile({ character, box, wide, eager, translations, tileRef }) {
     <Box
       ref={tileRef}
       component={RouterLink}
-      to={gallerySearchPath(character.name)}
+      to={characterPath(character.name)}
+      state={{ from: location.pathname + location.search }}
       aria-label={`${name}，${t('characters.families', { count: character.family_count.toLocaleString() })}`}
       sx={{
         position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h,

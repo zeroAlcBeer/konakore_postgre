@@ -1,7 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import {
-  chineseName, coverAction, coverUrl, gallerySearchPath, listRequest,
+  characterPath, characterRequest, chineseName, coverAction, coverUrl, gallerySearchPath, indexReturnPath, listRequest,
 } from './characters';
+
+describe('characterPath', () => {
+  it('encodes the name as one path segment', () => {
+    expect(characterPath('some_character')).toBe('/characters/some_character');
+    expect(characterPath('name_(work/sequel)')).toBe('/characters/name_(work%2Fsequel)');
+  });
+});
+
+describe('indexReturnPath', () => {
+  it('returns to the index page the visit started from', () => {
+    expect(indexReturnPath({ from: '/characters?work=some_work&page=2' })).toBe('/characters?work=some_work&page=2');
+    expect(indexReturnPath({ from: '/characters' })).toBe('/characters');
+  });
+
+  it('falls back to the index for anything else', () => {
+    expect(indexReturnPath(null)).toBe('/characters');
+    expect(indexReturnPath({ from: '/?tag=x' })).toBe('/characters');
+    expect(indexReturnPath({ from: '/characters/some_character' })).toBe('/characters');
+  });
+});
+
+describe('characterRequest', () => {
+  it('reads the liked filter and page', () => {
+    expect(characterRequest(new URLSearchParams('liked=1&page=3'))).toEqual({ liked: true, page: 3 });
+    expect(characterRequest(new URLSearchParams('page=x'))).toEqual({ liked: false, page: 1 });
+  });
+});
 
 describe('gallerySearchPath', () => {
   it('opens the gallery on a tag search, encoding the name', () => {

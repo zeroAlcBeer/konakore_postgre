@@ -28,7 +28,7 @@ function paintLikeButton(pswp, liked) {
  * @param {Function} options.handleTagClick - 点击 caption 中 tag 的回调
  * @param {Function} options.onToggleLike - (post) => void; flips post.liked
  * @param {Array}  options.posts - posts from the query cache (source of liked state)
- * @param {string} options.searchTag - the gallery's search tag; picks a group shot's cover character
+ * @param {string} options.searchTag - the open character page's tag (else the gallery's search tag); picks a group shot's cover character
  */
 export function usePhotoSwipe({
   displayPosts,

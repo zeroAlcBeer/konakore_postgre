@@ -122,11 +122,13 @@ The character's posts are not part of this API: the gallery's tag search
 
 ## UI
 
-A character's posts have one URL: the gallery's tag search, `/?tag=<name>`
-(`/favorites?tag=<name>` for likes). Every way to a character leads there:
-the character cards, the co-occurring chips, the search bar and the tags in
-the lightbox. The search tag lives in the URL, so back, reload and links
-keep it.
+A character has its own page, `/characters/<name>` (the name encoded as
+one path segment), apart from the gallery: viewing one character needs
+none of the gallery's search bar, tag exclusion or relevance filter. Every
+way to a character leads there: the index tiles, the co-occurring buttons,
+the tags in the lightbox, and the gallery's own tag search, which redirects
+a character tag to its page (`/favorites?tag=` to its page with
+`?liked=1`). Other tags stay gallery searches.
 
 **Characters tab** (`frontend/src/pages/CharactersPage.jsx`, `/characters`):
 a masonry of covers in pages of 40 (`?page=`, page links at the foot), in
@@ -136,8 +138,8 @@ one column wide and as tall as its cover's shape (`cover.width` /
 `cover.height`, 3:2 when unknown) and goes to the shortest column. Each
 tile shows the cover cropped to fill, and over a dark fade at its foot the
 Chinese name (else the tag name), the family count and the work. The work
-filter (`?work=`, set from the info bar's work link) shows as a chip that
-clears it. Clicking a tile opens `/?tag=<name>`.
+filter (`?work=`, set from the banner's work link) shows as a chip
+that clears it. Clicking a tile opens the character's page.
 
 The page breathes: every 4 seconds one tile, chosen uniformly among the
 others, spans two columns at twice the size, up to 3 at once; when a fourth
@@ -151,37 +153,44 @@ within that bound and may stay ragged when the gap is larger. Moves animate
 seconds after a touch, and never runs with reduced motion. Layout code:
 `frontend/src/utils/masonry.js`.
 
-**Character info bar** (`frontend/src/components/CharacterInfoBar.jsx`):
-under the gallery's search bar, in both the gallery and the favorites,
-whenever the searched tag is a character (`GET /v1/characters/{name}`
-returns it). A banner the width of the gallery shows the character's cover,
-cropped to fill behind a dark fade on its left, and over the fade the
-Chinese name (else the tag name) large, the tag name, the work (linking to
-`/characters?work=`) and the site-wide family count (labelled as
-site-wide, since the favorites grid shows fewer). Clicking the cover
-(it zooms in slightly on hover) opens the cover post (`cover.post_id`) in the gallery's
-own lightbox as a one-slide gallery, with everything the lightbox has for
-any post: the caption with its tags and info, like, set as cover,
-slideshow, fullscreen and zoom. The grid's gallery comes back when it
-closes. With no cover there is nothing to click. Under the banner, with
-no heading, one scrollable row of buttons for the co-occurring characters:
-each a small round crop of their cover, their name and the shared family
-count; pressing one switches the search to them. Nothing shows for other
-tags, for no search, or while the lookup is in flight.
+**Character page** (`frontend/src/pages/CharacterPage.jsx`), top to
+bottom:
+
+- A breadcrumb `All characters › name`. The root returns to the index page
+  the visit started from, with its page and work filter: an index tile
+  passes it in the router state, and moves within the character pages
+  (co-occurring buttons, character tags, the switch and paging below) carry
+  it along. Opened any other way, it leads to `/characters`.
+- The banner (`frontend/src/components/CharacterInfoBar.jsx`): the
+  character's cover cropped to fill behind a dark fade on its left, and over
+  the fade the Chinese name (else the tag name) large, the tag name, the
+  work and the site-wide family count. Clicking the cover (it zooms in
+  slightly on hover) opens the cover post (`cover.post_id`) in the page's
+  lightbox as a one-slide gallery, with everything the lightbox has for any
+  post: the caption with its tags and info, like, set as cover, slideshow,
+  fullscreen and zoom; the grid's gallery comes back when it closes. With
+  no cover there is nothing to click. Under it, with no heading, one
+  scrollable row of buttons for the co-occurring characters: each a small
+  round crop of their cover, their name and the shared family count;
+  pressing one opens their page.
+- The gallery's toolbar, with an all / favorites switch (`?liked=1`) in
+  place of its post counts, each side badged with its family count; then
+  paging (`?page=`), page size, sort and image size, and the
+  character's posts as the gallery shows them (grouped by family, newest
+  first), from `POST /v1/tags:search`. The toolbar drops the gallery's tag
+  exclusion and relevance filter, and its sort drops relevance: within one
+  character the relevance score barely tells liked posts apart (measured:
+  liked posts rank at the 61st percentile, the same as konachan's score and
+  below newest-first).
+
+The switch and the page live in the URL, so back, reload and links keep
+them. Opening a post leaves the URL alone, so the breadcrumb is one click
+from any post.
 
 **Set as cover** (lightbox toolbar, `frontend/src/hooks/usePhotoSwipe.js`):
 shown when the current post has at least one character
 (`GET /v1/posts/{id}/characters`), hidden otherwise. The pick is for the
-character the gallery is searching (`?tag=`) when the post shows it, else
-for the post's only character; it confirms in the lightbox. A post with
-several characters, opened outside a search for one of them, shows an error
-pointing to that character's search instead.
-
-**Character info bar** (`frontend/src/components/CharacterInfoBar.jsx`):
-under the gallery's search bar, in both the gallery and the favorites,
-whenever the searched tag is a character (`GET /v1/characters/{name}`
-returns it). It shows the Chinese and tag names, the work (linking to
-`/characters?work=`), the site-wide family count (labelled as site-wide,
-since the favorites grid shows fewer), and the co-occurring characters as
-chips that switch the search to them. Nothing shows for other tags, for no
-search, or while the lookup is in flight.
+character whose page is open when the post shows it, else for the post's
+only character; it confirms in the lightbox. A post with several
+characters, opened outside one of their pages, shows an error pointing to
+that character's page instead.

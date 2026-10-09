@@ -121,8 +121,13 @@
     "siteFamilies": "{{count}} sets site-wide",
     "setCover": "Set as character cover",
     "coverSet": "Now the cover of {{name}}",
-    "coverNeedsSingle": "This image shows several characters; set its cover from that character’s search",
+    "coverNeedsSingle": "This post shows several characters; set it as a cover from that character's page",
     "coverFailed": "Could not set the cover, try again",
-    "openCover": "View the cover"
+    "openCover": "View the cover",
+    "breadcrumb": "Character navigation",
+    "allPosts": "All",
+    "likedPosts": "Favorites",
+    "noLikedPosts": "No favorites of this character yet",
+    "allCharacters": "All characters"
   }
 }

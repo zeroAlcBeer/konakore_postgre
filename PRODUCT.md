@@ -34,7 +34,8 @@ works, covers, co-occurrence) rather than just tags.
 Self-hosted on a home server on the LAN; the owner deploys manually.
 Browsing is leisure, not work: sessions are open-ended wandering through
 images. The character index is for discovery, opened to find a character
-worth looking at, not to look one up (lookup is the gallery's tag search).
+worth looking at, not to look one up (lookup is the gallery's tag search,
+which leads to the character's page).
 
 ## Capabilities and Constraints
 
@@ -64,6 +65,7 @@ The live mirror: 336k posts, real character stats and covers via
 ## Product Principles
 
 - The images are the content; interface chrome stays out of their way.
-- One URL per result set: a character's posts are the gallery's tag search.
+- One URL per result set: a character's posts are its own page, which the
+  gallery's tag search redirects to.
 - Counts are honest about their scope (site-wide versus liked).
 - Nothing upstream is rewritten; derived data stays derived.
