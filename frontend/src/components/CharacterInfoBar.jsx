@@ -2,8 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link as RouterLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
-import { OpenInFull as OpenCoverIcon } from '@mui/icons-material';
+import { Box, ButtonBase, Typography } from '@mui/material';
 
 import { getCharacter } from '../api';
 import { useTag } from '../contexts/TagContext';
@@ -37,7 +36,7 @@ function PeerButton({ peer, translations, onSelect }) {
 /**
  * Banner under the gallery search bar when the searched tag is a character;
  * renders nothing otherwise (the lookup 404s) and while it loads.
- * onOpenCover(postId) opens the cover post in the gallery's lightbox.
+ * Clicking the cover calls onOpenCover(postId) to open it in the gallery's lightbox.
  * Contract: docs/characters.md, UI.
  */
 export default function CharacterInfoBar({ tag, onSelect, onOpenCover }) {
@@ -59,29 +58,31 @@ export default function CharacterInfoBar({ tag, onSelect, onOpenCover }) {
         position: 'relative', height: 'clamp(180px, 20vw, 250px)', borderRadius: '14px', overflow: 'hidden',
         bgcolor: 'background.paper', isolation: 'isolate', color: BANNER_INK,
         '&::after': {
-          content: '""', position: 'absolute', inset: 0, zIndex: -1,
+          content: '""', position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
           background: 'linear-gradient(90deg, rgba(10,10,12,.9) 0%, rgba(10,10,12,.72) 32%, rgba(10,10,12,.15) 70%, rgba(10,10,12,0) 100%)',
         },
       }}>
         {cover && (
-          <Box component="img" src={cover} alt="" sx={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%', zIndex: -2,
-          }} />
-        )}
-        {data.cover && (
-          <IconButton
+          <ButtonBase
             onClick={() => onOpenCover(data.cover.post_id)}
             aria-label={t('characters.openCover')}
             title={t('characters.openCover')}
             sx={{
-              position: 'absolute', top: 12, right: 12, color: BANNER_INK,
-              bgcolor: 'rgba(10,10,12,.45)', '&:hover': { bgcolor: 'rgba(10,10,12,.7)' },
+              position: 'absolute', inset: 0, zIndex: 0, cursor: 'zoom-in',
+              '& img': { transition: 'transform .4s ease, filter .4s ease' },
+              '&:hover img, &.Mui-focusVisible img': { transform: 'scale(1.03)', filter: 'brightness(1.08)' },
+              '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.light', outlineOffset: -2 },
+              '@media (prefers-reduced-motion: reduce)': { '& img': { transition: 'none' }, '&:hover img, &.Mui-focusVisible img': { transform: 'none' } },
             }}
           >
-            <OpenCoverIcon fontSize="small" />
-          </IconButton>
+            <Box component="img" src={cover} alt="" sx={{
+              width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%', display: 'block',
+            }} />
+          </ButtonBase>
         )}
-        <Box sx={{ position: 'absolute', left: 'clamp(20px, 3vw, 36px)', bottom: 'clamp(18px, 2.4vw, 28px)', maxWidth: 'min(560px, 70%)' }}>
+        <Box sx={{
+          position: 'absolute', zIndex: 2, pointerEvents: 'none', left: 'clamp(20px, 3vw, 36px)', bottom: 'clamp(18px, 2.4vw, 28px)', maxWidth: 'min(560px, 70%)',
+        }}>
           <Typography component="h2" sx={{
             m: 0, fontSize: 'clamp(28px, 3.2vw, 40px)', fontWeight: 680, letterSpacing: '-0.025em', lineHeight: 1.15,
             textShadow: '0 1px 3px rgba(0,0,0,.4)',
@@ -93,7 +94,7 @@ export default function CharacterInfoBar({ tag, onSelect, onOpenCover }) {
             {data.work && (
               <Box component={RouterLink} to={`/characters?${new URLSearchParams({ work: data.work })}`} sx={{
                 color: BANNER_INK, bgcolor: 'rgba(255,255,255,.12)', borderRadius: 999, px: 1.5, py: '2px', fontSize: 13,
-                textDecoration: 'none', '&:hover': { bgcolor: 'rgba(255,255,255,.2)' },
+                pointerEvents: 'auto', textDecoration: 'none', '&:hover': { bgcolor: 'rgba(255,255,255,.2)' },
               }}>
                 {chineseName(data.work, translations) || data.work}
               </Box>
