@@ -5,6 +5,7 @@ COPY worker/go.mod worker/go.sum ./
 RUN go mod download
 COPY worker/*.go ./
 COPY worker/migrations ./migrations
+COPY worker/assets ./assets
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/konakore-worker .
 
 FROM alpine:3.23

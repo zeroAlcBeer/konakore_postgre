@@ -18,6 +18,7 @@ by. A family counts for a tag when at least one of its posts carries it.
 - **Work**: the copyright tag (`type = 3`) that appears on the same post as
   the character in the most families; ties go to the lower tag id. NULL when
   the character never appears with a copyright tag.
+- **Chinese name**: the tag's name in `tag_names_zh` (docs/tag-names.md).
 - **Cover**: the owner's pick when there is one (see Cover picks), else one
   post rated `s`, picked by, in order:
   1. the post's only character tag is this character;

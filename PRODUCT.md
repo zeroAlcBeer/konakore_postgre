@@ -46,8 +46,8 @@ worth looking at, not to look one up (lookup is the gallery's tag search).
   the owner may pick any post carrying the character as its cover.
 - Character data (family count, work, cover, co-occurring characters) and
   which characters the index lists are defined in docs/characters.md.
-- Chinese names come from a third-party translation table loaded in the
-  frontend; many characters have none and show their tag name.
+- Chinese tag and character names come from one third-party dataset
+  (docs/tag-names.md); tags without a name there show their tag name.
 - UI languages: Chinese (primary) and English.
 - Frontend: React 19 + MUI, Vite; served by nginx in a container.
 
