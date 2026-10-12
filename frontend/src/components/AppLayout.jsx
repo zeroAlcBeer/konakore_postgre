@@ -1,14 +1,16 @@
 import React from 'react';
 import { AppBar, Toolbar, Container, Box, Tab, Tabs, IconButton, Tooltip } from '@mui/material';
-import { PhotoLibrary as GalleryIcon, Favorite as FavoriteIcon, BarChart as StatsIcon, TaskAlt as TasksIcon, Translate as TranslateIcon } from '@mui/icons-material';
+import { PhotoLibrary as GalleryIcon, Favorite as FavoriteIcon, Face as CharactersIcon, BarChart as StatsIcon, TaskAlt as TasksIcon, Translate as TranslateIcon } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+
+const TAB_PATHS = ['/favorites', '/characters', '/stats', '/tasks'];
 
 const AppLayout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const currentTab = ['/favorites', '/stats', '/tasks'].includes(location.pathname) ? location.pathname : '/';
+  const currentTab = TAB_PATHS.find((p) => location.pathname === p || location.pathname.startsWith(`${p}/`)) || '/';
 
   const toggleLanguage = () => {
     const newLang = i18n.language === 'zh-CN' ? 'en' : 'zh-CN';
@@ -40,6 +42,13 @@ const AppLayout = ({ children }) => {
                 iconPosition="start"
                 label={t('nav.favorites')}
                 value="/favorites"
+                sx={{ minHeight: 48, textTransform: 'none', fontWeight: 500 }}
+              />
+              <Tab
+                icon={<CharactersIcon sx={{ fontSize: 20 }} />}
+                iconPosition="start"
+                label={t('nav.characters')}
+                value="/characters"
                 sx={{ minHeight: 48, textTransform: 'none', fontWeight: 500 }}
               />
               <Tab

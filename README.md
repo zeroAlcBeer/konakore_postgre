@@ -23,13 +23,17 @@ history if you need them.
 | Topic | Doc |
 |---|---|
 | Stats page: data source, `stats_posts` view, refresh task | [docs/stats.md](docs/stats.md) |
+| Character page: definitions, `character_stats` views, refresh task, `/v1/characters` API | [docs/characters.md](docs/characters.md) |
 
 ## Development
 
 ```
-make up      # local stack via docker-compose.yaml
-make local   # frontend dev server against the remote API (frontend/.env)
-make help    # everything else
+make up           # local stack via docker-compose.yaml
+make local        # frontend dev server against the remote API (frontend/.env)
+make test-worker  # worker tests against a throwaway pgvector Postgres
+make test-api     # api tests, same throwaway Postgres
+make test-frontend  # frontend unit tests (vitest)
+make help         # everything else
 ```
 
 ## Deployment

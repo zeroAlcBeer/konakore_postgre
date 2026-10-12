@@ -2,6 +2,7 @@
   "nav": {
     "gallery": "Gallery",
     "favorites": "Favorites",
+    "characters": "Characters",
     "stats": "Stats",
     "tasks": "Tasks"
   },
@@ -111,5 +112,22 @@
     "loadError": "Failed to load",
     "noResults": "No results found",
     "noFavorites": "No favorites yet"
+  },
+  "characters": {
+    "work": "Work",
+    "families": "{{count}} sets",
+    "total": "{{count}} characters",
+    "empty": "No characters found",
+    "siteFamilies": "{{count}} sets site-wide",
+    "setCover": "Set as character cover",
+    "coverSet": "Now the cover of {{name}}",
+    "coverNeedsSingle": "This post shows several characters; set it as a cover from that character's page",
+    "coverFailed": "Could not set the cover, try again",
+    "openCover": "View the cover",
+    "breadcrumb": "Character navigation",
+    "allPosts": "All",
+    "likedPosts": "Favorites",
+    "noLikedPosts": "No favorites of this character yet",
+    "allCharacters": "All characters"
   }
 }

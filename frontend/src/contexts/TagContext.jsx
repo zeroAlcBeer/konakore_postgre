@@ -55,57 +55,44 @@ const initialState = {
 export const TagProvider = ({ children }) => {
   const [state, dispatch] = useReducer(tagReducer, initialState);
 
-  // 初始化
+  // 初始化：先订阅再加载，否则加载期间发出的事件（如 translations-loaded）会丢失
   useEffect(() => {
-    const initializeTags = async () => {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      
-      // 从TagManager加载数据
-      tagManager.loadFromStorage();
-      await tagManager.initTranslation();
-      
-      // 监听TagManager的变化
-      const handleTagManagerUpdate = (event) => {
-        switch (event.type) {
-          case 'storage-loaded':
-            dispatch({ type: 'STORAGE_LOADED', payload: event.data });
-            break;
-          case 'tags-added':
-            dispatch({ type: 'TAGS_ADDED', payload: event.data });
-            break;
-          case 'tag-info-updated':
-            dispatch({ type: 'TAG_INFO_UPDATED', payload: event.data });
-            break;
-          case 'translations-loaded':
-            dispatch({ type: 'TRANSLATIONS_LOADED', payload: event.data });
-            break;
-          case 'cache-cleared':
-            dispatch({ type: 'CACHE_CLEARED' });
-            break;
-          default:
-            break;
-        }
-      };
-      
-      tagManager.subscribe(handleTagManagerUpdate);
-      
-      // 触发初始加载完成
-      dispatch({ type: 'SET_LOADING', payload: false });
-      
-      // 清理函数
-      return () => {
-        tagManager.unsubscribe(handleTagManagerUpdate);
-      };
-    };
-    
-    const cleanup = initializeTags();
-    
-    // 组件卸载时清理
-    return () => {
-      if (cleanup && typeof cleanup.then === 'function') {
-        cleanup.then(cleanupFn => cleanupFn && cleanupFn());
+    const handleTagManagerUpdate = (event) => {
+      switch (event.type) {
+        case 'storage-loaded':
+          dispatch({ type: 'STORAGE_LOADED', payload: event.data });
+          break;
+        case 'tags-added':
+          dispatch({ type: 'TAGS_ADDED', payload: event.data });
+          break;
+        case 'tag-info-updated':
+          dispatch({ type: 'TAG_INFO_UPDATED', payload: event.data });
+          break;
+        case 'translations-loaded':
+          dispatch({ type: 'TRANSLATIONS_LOADED', payload: event.data });
+          break;
+        case 'cache-cleared':
+          dispatch({ type: 'CACHE_CLEARED' });
+          break;
+        default:
+          break;
       }
     };
+    tagManager.subscribe(handleTagManagerUpdate);
+
+    const initializeTags = async () => {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      tagManager.loadFromStorage();
+      await tagManager.initTranslation();
+      // 翻译可能在订阅之前就已加载（另一个实例先取到了），补发一次
+      if (tagManager.state.translations) {
+        dispatch({ type: 'TRANSLATIONS_LOADED', payload: tagManager.state.translations });
+      }
+      dispatch({ type: 'SET_LOADING', payload: false });
+    };
+    initializeTags();
+
+    return () => tagManager.unsubscribe(handleTagManagerUpdate);
   }, []);
 
   // 提供给组件的操作方法

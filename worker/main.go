@@ -97,6 +97,10 @@ func main() {
 		logger.Error("failed to ensure task schema", "event", "schema_failed", "error", err)
 		os.Exit(1)
 	}
+	if err := importTagNames(ctx, db, logger, tagNamesZhGz); err != nil {
+		logger.Error("failed to import tag names", "event", "tag_names_failed", "error", err)
+		os.Exit(1)
+	}
 
 	worker := &Worker{
 		cfg:        cfg,

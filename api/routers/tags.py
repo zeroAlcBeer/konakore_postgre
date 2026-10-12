@@ -1,10 +1,12 @@
 """
 Tags router - handles all tag-related endpoints.
 """
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, Request, Response
 from psycopg2.extras import RealDictCursor
 from typing import Optional
 from pydantic import BaseModel, Field
+import hashlib
+import json
 import logging
 
 from models import (
@@ -94,6 +96,24 @@ def list_tags(
             tags = [TagSummary(**tag) for tag in db_tags]
             
             return ListTagsResponse(tags=tags)
+
+
+@router.get("/zh-names")
+def get_zh_names(request: Request):
+    """
+    Chinese names of the tags we hold, as {tag name: Chinese name}; tags
+    without one are absent. Source and rules: docs/tag-names.md.
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT n.name, n.zh FROM tag_names_zh n JOIN tags t ON t.name = n.name ORDER BY n.name")
+            body = json.dumps(dict(cur.fetchall()), ensure_ascii=False, separators=(",", ":")).encode()
+
+    etag = '"' + hashlib.md5(body).hexdigest() + '"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 @router.get("/{tag_id}", response_model=GetTagResponse)

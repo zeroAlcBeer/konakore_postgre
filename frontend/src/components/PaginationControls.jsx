@@ -22,6 +22,8 @@ const PaginationControls = ({
   sandboxMin,
   sandboxMax,
   onClearSandbox,
+  withSimilarity = true,
+  summary,
 }) => {
   const { t } = useTranslation();
   const [jumpToPage, setJumpToPage] = useState('');
@@ -49,6 +51,7 @@ const PaginationControls = ({
     <Box sx={{ display: 'flex', flexDirection: 'column', mt: 4, mb: 2, gap: 2 }}>
       <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {summary ?? (
           <Typography variant="body2" color="text.secondary">
             {t('pagination.showing', {
               visible: visibleCount != null ? visibleCount : Math.min(perPage, totalItems - (currentPage - 1) * perPage),
@@ -56,6 +59,7 @@ const PaginationControls = ({
               total: totalItems.toLocaleString(),
             })}
           </Typography>
+          )}
           {sandboxMin != null && sandboxMax != null && (
             <Typography
               variant="body2"
@@ -142,7 +146,7 @@ const PaginationControls = ({
             <Select value={sortOption} label={t('sort.label')} onChange={(e) => onSortChange(e.target.value)} disabled={isLoading}>
               <MenuItem value="score">{t('sort.score')}</MenuItem>
               <MenuItem value="id">{t('sort.id')}</MenuItem>
-              <MenuItem value="similarity">{t('sort.similarity')}</MenuItem>
+              {withSimilarity && <MenuItem value="similarity">{t('sort.similarity')}</MenuItem>}
               <MenuItem value="file_size">{t('sort.fileSize')}</MenuItem>
               <MenuItem value="resolution">{t('sort.resolution')}</MenuItem>
               <MenuItem value="waifu_pillow">{t('sort.wideFirst')}</MenuItem>

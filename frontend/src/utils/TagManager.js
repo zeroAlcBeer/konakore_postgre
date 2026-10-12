@@ -521,7 +521,7 @@ class TagManager {
 
         this.state.isFetchingTranslations = true; // 设置状态锁
         try {
-          const response = await fetch("https://cdn.jsdelivr.net/gh/asadahimeka/yandere-masonry@main/src/data/all_tags_cn.min.json");
+          const response = await fetch('/api/v1/tags/zh-names'); // docs/tag-names.md
           if (response.ok) {
             this.state.translations = await response.json();
             this.notify({ type: 'translations-loaded', data: this.state.translations });

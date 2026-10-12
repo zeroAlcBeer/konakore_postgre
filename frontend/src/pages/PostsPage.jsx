@@ -1,7 +1,7 @@
 import React, { useState, useReducer, useMemo, useEffect, useCallback, useTransition, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 
 import SearchBar from '../components/SearchBar';
 import MasonryGrid from '../components/MasonryGrid';
@@ -9,7 +9,7 @@ import AppLayout from '../components/AppLayout';
 import PaginationControls from '../components/PaginationControls';
 import SimplePagination from '../components/SimplePagination';
 import LazyImageCard from '../components/LazyImageCard';
-import { getPosts, searchTags, getSandboxPosts } from '../api';
+import { getPosts, searchTags, getSandboxPosts, getCharacter } from '../api';
 import { useTag } from '../contexts/TagContext';
 import { tagManager } from '../utils/TagManager';
 import { Box, CircularProgress, Typography, Snackbar, Alert, Button } from '@mui/material';
@@ -20,6 +20,7 @@ import ImageSizeModal from '../components/ImageSizeModal';
 import { usePhotoSwipe } from '../hooks/usePhotoSwipe';
 import { usePostsProcessing } from '../hooks/usePostsProcessing';
 import { useToggleLike, POST_LIST_KEY } from '../hooks/useToggleLike';
+import { characterPath } from '../utils/characters';
 import CaptionContent from '../components/CaptionContent';
 import { useTranslation } from 'react-i18next';
 
@@ -108,10 +109,11 @@ function PostsPageContent({
   );
 }
 
-// UI state grouped so one logical update is one render.
+// UI state grouped so one logical update is one render. The search tag lives
+// in the URL (?tag=); the page belongs to the query it was set for.
 const uiStateInit = () => ({
-  searchQuery: '',
   currentPage: 1,
+  pageQuery: '',
   perPage: 100,
   sortOption: 'id',
   excludedTagsOpen: false,
@@ -123,12 +125,8 @@ const uiStateInit = () => ({
 
 function uiStateReducer(state, action) {
   switch (action.type) {
-    case 'SEARCH':
-      return { ...state, searchQuery: action.query, currentPage: 1, sortOption: 'id' };
-    case 'CLEAR_SEARCH':
-      return { ...state, searchQuery: '', currentPage: 1 };
     case 'SET_PAGE':
-      return { ...state, currentPage: action.page };
+      return { ...state, currentPage: action.page, pageQuery: action.query };
     case 'SET_PER_PAGE':
       return { ...state, perPage: action.perPage, currentPage: 1 };
     case 'SET_SORT':
@@ -304,7 +302,9 @@ const PostsPage = ({ scope = 'all' }) => {
     getTagTranslation,
   } = useTag();
 
-  const { searchQuery, currentPage, perPage, sortOption, excludedTagsOpen, relevanceFilterOpen, imageSizeOpen, columnWidth, snackbar } = ui;
+  const { perPage, sortOption, excludedTagsOpen, relevanceFilterOpen, imageSizeOpen, columnWidth, snackbar } = ui;
+  const searchQuery = searchParams.get('tag') || '';
+  const currentPage = ui.pageQuery === searchQuery ? ui.currentPage : 1;
 
   // Sandbox mode: derived from URL params
   const sandboxMin = searchParams.has('id_min') ? parseInt(searchParams.get('id_min'), 10) : null;
@@ -312,7 +312,12 @@ const PostsPage = ({ scope = 'all' }) => {
   const isSandbox = sandboxMin !== null && sandboxMax !== null && !isNaN(sandboxMin) && !isNaN(sandboxMax);
 
   const handleClearSandbox = useCallback(() => {
-    setSearchParams({}, { replace: true });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('id_min');
+      next.delete('id_max');
+      return next;
+    }, { replace: true });
     dispatch({ type: 'CLEAR_SANDBOX' });
   }, [setSearchParams]);
 
@@ -330,6 +335,15 @@ const PostsPage = ({ scope = 'all' }) => {
     return () => clearTimeout(timeoutId);
   }, [shouldFetchTagInfo, currentPage, perPage, fetchTagInfo]);
 
+  // A character tag has its own page (docs/characters.md, UI); same query as its banner there.
+  const { data: searchedCharacter } = useQuery({
+    queryKey: ['character', searchQuery],
+    queryFn: () => getCharacter(searchQuery),
+    enabled: !!searchQuery,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   const {
     posts, postsForGrid, displayPosts, groupMap,
     excludedCountOnPage, relevanceRemovedCount, postScoresMap,
@@ -342,15 +356,20 @@ const PostsPage = ({ scope = 'all' }) => {
   });
 
   // --- EVENT HANDLERS ---
-  const handleSearch = (query) => dispatch({ type: 'SEARCH', query });
-  const clearSearch = () => dispatch({ type: 'CLEAR_SEARCH' });
-
-  const handleTagClick = useCallback((tag) => {
-    dispatch({ type: 'SEARCH', query: tag });
-  }, []);
+  // A new search starts at page 1 (see currentPage) and the default sort.
+  const handleSearch = useCallback((query) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (query) next.set('tag', query); else next.delete('tag');
+      return next;
+    });
+    dispatch({ type: 'SET_SORT', sortOption: 'id' });
+  }, [setSearchParams]);
+  const clearSearch = () => handleSearch('');
+  const handleTagClick = handleSearch;
 
   const handlePageChange = (page) => {
-    dispatch({ type: 'SET_PAGE', page });
+    dispatch({ type: 'SET_PAGE', page, query: searchQuery });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -403,6 +422,7 @@ const PostsPage = ({ scope = 'all' }) => {
     handleTagClick,
     onToggleLike: handleToggleLike,
     posts,
+    searchTag: searchQuery,
   });
 
   // Caption post, looked up among all posts including grouped children
@@ -412,6 +432,11 @@ const PostsPage = ({ scope = 'all' }) => {
   }, [activePostId, postsForGrid]);
 
   // --- RENDER ---
+
+  if (searchedCharacter) {
+    const liked = scope === 'liked' ? '?liked=1' : '';
+    return <Navigate replace to={characterPath(searchedCharacter.name) + liked} />;
+  }
 
   return (
     <AppLayout>

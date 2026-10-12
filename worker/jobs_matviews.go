@@ -16,7 +16,7 @@ const (
 	matviewsRefreshInterval = 10 * time.Minute
 )
 
-var matviews = []string{"stats_posts"}
+var matviews = []string{"stats_posts", "character_stats", "character_cooccurrence"}
 
 func refreshMaterializedViews(ctx context.Context, db *sql.DB) error {
 	for _, view := range matviews {

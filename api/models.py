@@ -278,6 +278,38 @@ class StatsDistributionResponse(BaseModel):
     generated_at: float
 
 
+class CharacterCover(BaseModel):
+    """Cover post of a character; URLs are the upstream ones from raw_data."""
+    post_id: int
+    preview_url: Optional[str] = None
+    sample_url: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+
+class CharacterSummary(BaseModel):
+    """A character in a list (definitions: docs/characters.md)."""
+    name: str
+    family_count: int
+    work: Optional[str] = None
+    cover: Optional[CharacterCover] = None
+
+
+class CooccurringCharacter(BaseModel):
+    name: str
+    family_count: int = Field(..., description="Families shared with the character")
+    cover: Optional[CharacterCover] = None
+
+
+class Character(CharacterSummary):
+    cooccurring: List[CooccurringCharacter]
+
+
+class ListCharactersResponse(BaseModel):
+    characters: List[CharacterSummary]
+    pagination: PaginationInfo
+
+
 class TaskStateResponse(BaseModel):
     """Worker task state with progress data."""
     id: str

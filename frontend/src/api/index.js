@@ -86,3 +86,29 @@ export const getTasks = async () => {
   const response = await apiClient.get('/v1/tasks');
   return response.data;
 };
+
+export const getCharacters = async ({ work = null, page = 1, limit = 24 } = {}) => {
+  const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
+  if (work) params.append('work', work);
+  const response = await apiClient.get(`/v1/characters?${params}`);
+  return response.data;
+};
+
+export const getCharacter = async (name) => {
+  const response = await apiClient.get(`/v1/characters/${encodeURIComponent(name)}`);
+  return response.data;
+};
+
+export const getPostCharacters = async (postId) => {
+  const response = await apiClient.get(`/v1/posts/${postId}/characters`);
+  return response.data.characters;
+};
+
+export const setCharacterCover = async (name, postId) => {
+  await apiClient.post(`/v1/characters/${encodeURIComponent(name)}:setCover`, { post_id: postId });
+};
+
+export const getPost = async (postId) => {
+  const response = await apiClient.get(`/v1/posts/${postId}`);
+  return response.data.post;
+};

@@ -8,7 +8,7 @@ import { likePost, unlikePost } from '../api';
 export const POST_LIST_KEY = 'post-list';
 
 // Queries whose numbers depend on the liked set.
-const LIKE_DEPENDENT_KEYS = [['stats-overview'], ['user-preferences']];
+const LIKE_DEPENDENT_KEYS = [['stats-overview'], ['user-preferences'], ['character-count']];
 
 function setLikedInPostLists(queryClient, postId, liked) {
   queryClient.setQueriesData({ queryKey: [POST_LIST_KEY] }, (data) => {
